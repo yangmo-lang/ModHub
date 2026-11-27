@@ -66,3 +66,57 @@ test('逐抽格子：T 編號與各稀有度計數', () => {
   assert.deepEqual(all.map((x) => [x.t, x.name, x.n]), [[5, 'e', 2], [4, 'd', 4], [3, 'c', 2], [2, 'b', 2], [1, 'a', 1]]);
   assert.equal(v.pullGrid(recs, {}, { pool: SP, bannerId: 'B' }).length, 1);
 });
+
+test('絕區零（無官方統計）：限定池依時間分期，名稱為該期 UP，保底跨期累計', () => {
+  const v = require('../electron/gacha/visual.cjs');
+  const D = 86400000;
+  const t0 = Date.parse('2026-07-06T12:00:00Z');
+  const recs = [];
+  let id = 1;
+  const add = (time, name, tier = 'low') => recs.push({ id: String(id++), pool: 'zzz:2', name, tier, rarity: tier === 'top' ? 4 : 2, time });
+  for (let i = 0; i < 23; i++) add(t0 + i * 1000, 'x');
+  add(t0 + 30000, '維琳娜', 'top');
+  for (let i = 0; i < 6; i++) add(t0 + 40000 + i, 'x'); // 已墊 6
+  for (let i = 0; i < 70; i++) add(t0 + 23 * D + i * 1000, 'x');
+  add(t0 + 23 * D + 80000, '萊卡恩', 'top'); // 歪
+  add(t0 + 23 * D + 90000, '蕾米埃爾', 'top');
+  const g = v.buildZzzFromRecords(recs, {}).groups[0];
+  assert.equal(g.banners.length, 2);
+  const [newer, older] = g.banners;
+  assert.equal(older.name, '維琳娜');
+  assert.equal(older.pad, 6);
+  assert.equal(newer.name, '蕾米埃爾');
+  assert.equal(newer.entries.find((e) => e.name === '萊卡恩').pity, 77, '6 + 71：保底跨期累計');
+  assert.equal(newer.entries.find((e) => e.name === '萊卡恩').isUp, false);
+});
+
+test('離愁軒摘要：只補 ModHub 紀錄之前的卡池，常駐只補之前的 6★', () => {
+  const v = require('../electron/gacha/visual.cjs');
+  const lcx = require('../electron/gacha/lcx.cjs');
+  const now = Date.parse('2026-11-27T12:00:00');
+  const h = lcx.parse({
+    limited: [
+      { head: '冬猎 09月02日 ~ 09月04日 合计 74 抽 垫6', items: [{ pull: 6, stamps: ['暂未出货'] }, { six: '提弗洛斯', pull: 68, date: '09-02', stamps: [] }, { pull: 10, stamps: ['免'] }] },
+      { head: '狼珀 03月29日 ~ 03月31日 合计 60 抽 垫32', items: [{ pull: 32, stamps: ['暂未出货'] }, { pull: 10, stamps: ['免'] }, { six: '汤汤', pull: 28, date: '03-29', stamps: ['歪'] }] },
+    ],
+    standard: [{ head: '基础寻访 01月22日 ~ 10月10日 合计 172 抽 保底 14 / 80', items: [{ pull: 14, stamps: ['暂未出货'] }, { six: '骏卫', pull: 43, date: '09-21', stamps: [] }, { six: '别礼', pull: 39, date: '03-12', stamps: [] }] }],
+  }, { now });
+  const SPc = 'char:E_CharacterGachaPoolType_Special';
+  const STD = 'char:E_CharacterGachaPoolType_Standard';
+  const t = Date.parse('2026-09-02T11:00:00');
+  const records = [
+    { id: 'c:1', pool: SPc, bannerId: 'b1', bannerName: '冬獵', poolName: '特許尋訪', name: 'x', tier: 'low', rarity: 4, time: t },
+    { id: 'c:2', pool: STD, bannerId: 's', bannerName: '基礎尋訪', poolName: '基礎尋訪', name: 'y', tier: 'low', rarity: 4, time: t },
+  ];
+  const vis = v.mergeHistory(v.buildEndfield(records, {}, {}), h, records, {});
+  const sp = vis.groups.find((g) => g.key === SPc);
+  assert.deepEqual(sp.banners.map((b) => b.name), ['冬獵', '狼珀'], '冬獵已有逐抽紀錄，不重複；狼珀補上');
+  const wolf = sp.banners[1];
+  assert.equal(wolf.pulls, 70);
+  assert.equal(wolf.free, 10);
+  assert.equal(wolf.entries.find((e) => e.type === 'top').isUp, false);
+  const std = vis.groups.find((g) => g.key === STD);
+  const old = std.banners.find((b) => b.history);
+  assert.deepEqual(old.entries.map((e) => e.name), ['別禮'], '9/2 之後的 6★ 不補');
+  assert.equal(old.pulls, null);
+});

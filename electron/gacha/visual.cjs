@@ -128,6 +128,73 @@ function buildEndfield(records, poolInfo = {}, icons = {}) {
   };
 }
 
+/**
+ * 把外部歷史摘要（離愁軒）補進終末地總覽：只補「比 ModHub 逐抽紀錄更早」的卡池。
+ *   - 該類型完全沒有 ModHub 紀錄、或卡池結束日早於 ModHub 該類型第一筆紀錄 → 整期加入
+ *   - 常駐 / 啟程這種跨很久的單一卡池：只把 ModHub 第一筆紀錄之前的 6★ 加成一期「（離愁軒，之前）」，抽數不明
+ */
+function mergeHistory(vis, history, records, icons = {}) {
+  if (!history?.groups) return vis;
+  const DAY = 86400000;
+  const firstOf = {};
+  for (const r of records) {
+    const g = r.pool.startsWith('weapon:') ? 'weapon' : r.pool;
+    if (firstOf[g] == null || r.time < firstOf[g]) firstOf[g] = r.time;
+  }
+  const label = history.source === 'lcx' ? '離愁軒' : '匯入';
+  let addPulls = 0, addFree = 0, addTops = 0, addUpWin = 0, addUpKnown = 0;
+  for (const [gkey, banners] of Object.entries(history.groups)) {
+    const first = firstOf[gkey];
+    // ModHub 第一筆紀錄的「當天」之前（摘要只有日期，同一天的算重複）
+    const cutoff = first != null ? new Date(new Date(first).toDateString()).getTime() : Infinity;
+    const out = [];
+    for (const b of banners) {
+      const whole = b.end < cutoff;
+      const tops = b.entries.filter((e) => e.type === 'top' && e.time < cutoff);
+      if (!whole && !tops.length) continue;
+      const entries = (whole ? b.entries : tops).map((e) => (e.type === 'top' ? { ...e, icon: iconOf(icons, e.name), rarity: 6 } : e)).reverse();
+      const t = entries.filter((e) => e.type === 'top');
+      out.push({
+        id: `hist|${gkey}|${b.name}|${b.start}`,
+        name: whole ? b.name : `${b.name}（${label}，${fmtMd(cutoff - DAY)} 前）`,
+        start: b.start,
+        end: whole ? b.end : Math.min(b.end, cutoff - DAY),
+        current: false,
+        pulls: whole && b.total != null ? b.total + (b.free || 0) : null,
+        free: whole ? b.free || 0 : 0,
+        pad: whole ? b.pad || 0 : 0,
+        upName: null,
+        upIcon: null,
+        entries,
+        tops: summarizeTops(entries),
+        history: label,
+      });
+      if (whole && b.total != null) { addPulls += b.total; addFree += b.free || 0; }
+      addTops += t.length;
+      for (const e of t) if (e.isUp != null) { addUpKnown++; if (e.isUp) addUpWin++; }
+    }
+    if (!out.length) continue;
+    let g = vis.groups.find((x) => x.key === gkey);
+    if (!g) {
+      const meta = gkey === 'weapon' ? { label: '武器申領', order: 4, pityMax: 40 } : EF_CHAR[gkey.slice(5)] || { label: gkey, order: 9, pityMax: 80 };
+      g = { key: gkey, label: meta.label, order: meta.order, pityNow: out[out.length - 1].pad || 0, pityMax: meta.pityMax, bigPity: null, pulls: 0, free: 0, banners: [] };
+      vis.groups.push(g);
+    }
+    g.banners = [...g.banners, ...out.sort((a, b) => b.end - a.end)];
+    g.pulls += out.reduce((s, b) => s + (b.pulls != null ? b.pulls : 0), 0);
+    g.free += out.reduce((s, b) => s + (b.pulls != null ? b.free : 0), 0);
+    g.history = label;
+  }
+  vis.groups.sort((a, b) => a.order - b.order);
+  const T = vis.totals;
+  const upWin = T.upWin != null ? T.upWin * T.upKnown : 0;
+  const pulls = T.pulls + addPulls;
+  const tops = T.tops + addTops;
+  const known = T.upKnown + addUpKnown;
+  vis.totals = { ...T, pulls, free: T.free + addFree, tops, topRate: pulls ? tops / (pulls + T.free + addFree) : 0, upWin: known ? (upWin + addUpWin) / known : null, upKnown: known, history: label };
+  return vis;
+}
+
 // ---------------- 絕區零 ----------------
 const ZZZ_TYPES = {
   GACHA_TYPE_CHARACTER_UP: { label: '獨家頻段', order: 1, pool: 'zzz:2', limited: true },
@@ -206,7 +273,62 @@ function buildZzz(records, official, icons = {}) {
 }
 
 // 常駐 S（拿來判斷「歪」）：常駐頻段出過的 + 已知常駐代理人
-const ZZZ_STANDARD_S = ['貓又', '「11號」', '11號', '珂蕾妲', '萊卡恩', '格莉絲', '麗娜'];
+const ZZZ_STANDARD_S = ['貓又', '「11號」', '11號', '珂蕾妲', '萊卡恩', '格莉絲', '麗娜', '鋼鐵肉墊', '硫磺石', '啜泣搖籃', '燃獄齒輪', '拘縛者', '加農轉子'];
+
+/**
+ * 沒有官方統計時，用逐抽紀錄推算「每期卡池」。
+ * 逐抽紀錄沒有卡池 id（gacha_id 是空的），而且同一期常有兩個 UP 池共用保底，
+ * 所以限定池依「抽卡時間」分期：相隔超過 PHASE_IDLE 沒抽、或一期超過 PHASE_SPAN，就算下一期；
+ * 卡池名稱 = 該期出過的 UP（非常駐 S）。保底跨期累計，期末沒出的抽數 =「已墊」。常駐 / 邦布池不分期。
+ */
+const DAY = 86400000;
+const PHASE_IDLE = 6 * DAY;
+const PHASE_SPAN = 21 * DAY;
+
+function zzzBannersFromRecords(pool, list, roster, icons) {
+  const limited = pool === 'zzz:2' || pool === 'zzz:3';
+  const label = ZZZ_FALLBACK[pool];
+  const phases = [];
+  for (const r of list) {
+    const ph = phases[phases.length - 1];
+    if (limited && ph && (r.time - ph.last > PHASE_IDLE || r.time - ph.first > PHASE_SPAN)) phases.push({ first: r.time, last: r.time, recs: [r] });
+    else if (ph) { ph.recs.push(r); ph.last = r.time; } else phases.push({ first: r.time, last: r.time, recs: [r] });
+  }
+  let pity = 0;
+  const banners = phases.map((ph) => {
+    const entries = [];
+    ph.recs.forEach((r, i) => {
+      pity++;
+      if (r.tier === 'top') {
+        entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: limited ? !roster.has(r.name) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
+        pity = 0;
+      }
+    });
+    const ups = [...new Set(entries.filter((e) => e.isUp).map((e) => e.name))];
+    const rev = entries.reverse();
+    return {
+      id: `${pool}|${ph.recs[0].id}`,
+      name: limited && ups.length ? ups.join('、') : limited ? `${label}（${fmtMd(ph.first)}）` : label,
+      current: false,
+      pulls: ph.recs.length,
+      free: 0,
+      start: ph.first,
+      end: ph.last,
+      upName: ups[0] || null,
+      upIcon: iconOf(icons, ups[0]),
+      upList: ups.map((n) => ({ name: n, icon: iconOf(icons, n) })),
+      entries: rev,
+      tops: summarizeTops(rev),
+      pad: pity,
+    };
+  });
+  // 最後一期：近 3 週內還有抽才算「進行中」
+  const lastB = banners[banners.length - 1];
+  if (lastB && Date.now() - lastB.end < PHASE_SPAN) lastB.current = true;
+  return banners.reverse();
+}
+
+const fmtMd = (t) => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; };
 
 function buildZzzFromRecords(records, icons) {
   const roster = new Set([...ZZZ_STANDARD_S, ...records.filter((r) => r.pool === 'zzz:1' && r.tier === 'top').map((r) => r.name)]);
@@ -215,19 +337,10 @@ function buildZzzFromRecords(records, icons) {
     const list = records.filter((r) => r.pool === pool);
     if (!list.length) continue;
     let pity = 0;
-    const entries = [];
-    list.forEach((r, i) => {
-      pity++;
-      if (r.tier === 'top') {
-        const limited = pool === 'zzz:2' || pool === 'zzz:3';
-        entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: limited ? !roster.has(r.name) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
-        pity = 0;
-      }
-    });
-    const rev = entries.reverse();
+    for (const r of list) pity = r.tier === 'top' ? 0 : pity + 1;
     groups.push({
       key: pool, label: ZZZ_FALLBACK[pool], pool, pityNow: pity, pityMax: PITY_MAX[pool], pulls: list.length, free: 0,
-      banners: [{ id: pool, name: ZZZ_FALLBACK[pool], current: true, pulls: list.length, free: 0, start: list[0].time, end: list[list.length - 1].time, entries: rev, tops: summarizeTops(rev), pad: pity }],
+      banners: zzzBannersFromRecords(pool, list, roster, icons),
     });
   }
   const tops = records.filter((r) => r.tier === 'top');
@@ -255,4 +368,4 @@ function pullGrid(records, icons = {}, { pool, bannerId, isWeaponGroup } = {}) {
   return filtered.reverse();
 }
 
-module.exports = { buildEndfield, buildZzz, buildZzzFromRecords, pullGrid, ZZZ_TYPES };
+module.exports = { mergeHistory, buildEndfield, buildZzz, buildZzzFromRecords, pullGrid, ZZZ_TYPES };

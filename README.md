@@ -78,6 +78,7 @@ npm test         # 掃描/切換邏輯單元測試
 - 「抽卡紀錄」分頁：在遊戲內開啟紀錄頁面後按「↻ 從遊戲更新」，或「貼上網址」
   - 終末地：讀 `%USERPROFILE%\AppData\LocalLow\{Gryphline|Hypergryph}\Endfield\sdklogs\HGWebview.log` 裡最新的
     `ef-webview…/page/gacha_*?u8_token=…` 網址，呼叫 `/api/record/char`、`/api/record/weapon`（做法參考 bhaoo/endfield-gacha，MIT）
+    - 新版遊戲已不再把含 token 的網址寫進日誌；日誌沒有連結或連結過期時，若已登入鷹角帳號會自動改用帳號更新
   - 絕區零：讀遊戲 `ZenlessZoneZero_Data\webCaches\<版本>\Cache\Cache_Data\data_2` 裡 `auth_appid=webview_gacha` 的 authkey，
     呼叫官方 `getGachaLog`；另有按鈕開啟 HoYoLAB 官方調頻紀錄頁
 - token / authkey 只在記憶體中使用，不寫入檔案；連結有效時間很短，開完紀錄頁要馬上更新
@@ -95,6 +96,9 @@ npm test         # 掃描/切換邏輯單元測試
   - 終末地：UP 角色與立繪來自公開的 `ef-webview…/api/content`（近期卡池）；查不到的舊卡池用常駐池 6★ 名單判斷歪
   - 絕區零：登入 HoYoLAB 時另抓官方調頻查詢工具的統計（`/api/zzz/index`、`hist_pool_stat`、`cur_pool_stat`），
     含全部版本、官方 is_up 與圖示；逐抽紀錄 API 只保留約 6 個月
+  - 「從遊戲更新」時若 HoYoLAB 已登入同一個 uid，也會一併更新官方統計
+  - 沒有官方統計時，限定池依抽卡時間分期（6 天沒抽或超過 21 天算下一期），卡池名稱 = 該期出的 UP；保底跨期累計
+- 登入 cookie 在登入後、呼叫官方 API 後與關閉程式前立即寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
 - 尚未支援：UIGF 標準格式匯入匯出
 
 ### 線上下載（GameBanana / Nexus Mods）

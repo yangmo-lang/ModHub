@@ -163,6 +163,7 @@ export default function Gacha({ gameId, gameName, showToast }) {
               <div className="g-sub">
                 {group?.label || ''} — 更新於 {fmtFull(vis.updatedAt)}
                 {vis.totals.source === 'official' && <span className="g-src">含 HoYoLAB 官方統計（全部版本）</span>}
+                {vis.totals.history && <span className="g-src">含{vis.totals.history}補充的早期卡池（只有出貨摘要）</span>}
               </div>
             </div>
 
@@ -231,7 +232,7 @@ function GroupView({ group, T, onOpen }) {
               <span>
                 {b.pulls != null ? <>總計 <b>{b.pulls - (b.free || 0)}</b>{b.free ? <> + <em>{b.free}</em></> : null} 抽</> : `${b.tops.reduce((s, t) => s + t.count, 0)} 個 ${T.top}`}
                 {b.current ? <span className="g-live">進行中</span> : null}
-                <span className="g-more">逐抽 ›</span>
+                {b.history ? <span className="g-src">{b.history}</span> : <span className="g-more">逐抽 ›</span>}
               </span>
             </div>
 
@@ -284,7 +285,7 @@ function GroupView({ group, T, onOpen }) {
             {past.map((b) => (
               <div key={b.id} className="g-past-card" onClick={() => onOpen(b)} role="button">
                 <div className="g-past-head">
-                  <b>{b.name}</b>
+                  <b>{b.name}{b.history ? <span className="g-src">{b.history}</span> : null}</b>
                   <small>{b.version ? `v${b.version} · ` : ''}{b.pulls != null ? `總計 ${b.pulls - (b.free || 0)}${b.free ? ` + ${b.free}` : ''} 抽` : ''}</small>
                 </div>
                 <div className="g-past-tops">
@@ -312,6 +313,7 @@ function BannerDetail({ gameId, accountId, vis, group, banner, T, onBack }) {
   const [tier, setTier] = useState('');
   useEffect(() => {
     let alive = true;
+    if (banner.history) { setGrid([]); return () => {}; }
     const opts = gameId === 'EFMI'
       ? (group.key === 'weapon' ? { isWeaponGroup: true, bannerId: banner.id } : { pool: group.key, bannerId: banner.id })
       : { pool: group.pool || group.key };
@@ -367,7 +369,7 @@ function BannerDetail({ gameId, accountId, vis, group, banner, T, onBack }) {
         </div>
         {gameId === 'ZZMI' && <span className="card-meta">（官方逐抽紀錄只保留約 6 個月）</span>}
       </div>
-      {grid && !shown.length && <div className="g-empty">沒有可顯示的逐抽紀錄</div>}
+      {grid && !shown.length && <div className="g-empty">{banner.history ? `這期來自${banner.history}，只有出貨摘要，沒有逐抽紀錄` : "沒有可顯示的逐抽紀錄"}</div>}
       <div className="g-grid">
         {shown.map((x) => (
           <div key={x.id} className={`g-cell g-${x.tier}`} title={`${x.banner || ''} ${fmtFull(x.time)}`}>

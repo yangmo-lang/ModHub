@@ -40,7 +40,14 @@ async function sfetchJson(provider, url, init = {}) {
     headers: { 'User-Agent': UA, Accept: 'application/json', ...(init.headers || {}) },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  scheduleFlush(provider); // 官方 API 可能換發 cookie
   return r.json();
+}
+
+const flushTimers = {};
+function scheduleFlush(provider) {
+  clearTimeout(flushTimers[provider]);
+  flushTimers[provider] = setTimeout(() => ses(provider).cookies.flushStore().catch(() => {}), 1500);
 }
 
 async function postJson(url, body) {
@@ -178,6 +185,8 @@ function openLogin(provider, parent) {
       if (done) return;
       done = true;
       clearInterval(timer);
+      // Chromium 預設約 30 秒才把 cookie 寫回磁碟：登入後馬上關掉 ModHub 會遺失登入，所以立刻寫入
+      ses(provider).cookies.flushStore().catch(() => {});
       if (!win.isDestroyed()) win.close();
       resolve(ok);
     };
@@ -206,7 +215,13 @@ function openLogin(provider, parent) {
 
 async function logout(provider) {
   await ses(provider).clearStorageData();
+  await ses(provider).cookies.flushStore().catch(() => {});
   return true;
+}
+
+/** 關閉程式前把所有登入分區的 cookie 寫回磁碟 */
+function flushAll() {
+  return Promise.all(Object.keys(PROVIDERS).map((p) => ses(p).cookies.flushStore().catch(() => {})));
 }
 
 /** 用 HoYoLAB 登入分區送出請求（給其他模組用，例如養成同步） */
@@ -214,4 +229,4 @@ function hoyoFetchJson(url, init) {
   return sfetchJson('hoyolab', url, { ...init, headers: { 'x-rpc-language': 'zh-tw', ...(init?.headers || {}) } });
 }
 
-module.exports = { PROVIDERS, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };
+module.exports = { PROVIDERS, flushAll, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };

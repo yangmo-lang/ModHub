@@ -7,6 +7,7 @@ const ef = require('./endfield.cjs');
 const zzz = require('./zzz.cjs');
 const login = require('./login.cjs');
 const visual = require('./visual.cjs');
+const lcx = require('./lcx.cjs');
 const { normalizeName, toTw } = require('../characters.cjs');
 
 const SUPPORTED = { EFMI: 'endfield', ZZMI: 'zzz' };
@@ -136,14 +137,32 @@ function register(ipcMain, ctx) {
     if (opts.mode === 'account') return updateByAccount(gameId, progress);
     if (gameId === 'EFMI') {
       const auth = opts.url ? ef.parseGachaUrl(opts.url) : ef.findFromLog();
-      if (!auth) throw new Error(opts.url ? '這不是終末地的尋訪紀錄網址' : '找不到抽卡連結：請先在遊戲內開啟「尋訪紀錄」頁面');
+      if (!auth && opts.url) throw new Error('這不是終末地的尋訪紀錄網址');
+      // 新版遊戲不再把含 u8_token 的網址寫進 HGWebview.log：日誌裡只剩舊連結（已過期）或沒有。
+      // 有登入鷹角帳號時直接改用帳號更新。
+      const viaAccount = async (why) => {
+        const logged = await Promise.all(['gryphline', 'hypergryph'].map((p) => login.hgRoles(p).catch(() => null)));
+        if (logged.some((x) => x?.roles?.length)) {
+          progress({ stage: `${why}，改用已登入的鷹角帳號` });
+          return updateByAccount(gameId, progress);
+        }
+        throw new Error(`${why}。新版終末地不再把抽卡連結寫進遊戲日誌，請在上方「官方帳號」登入鷹角通行證後按「用帳號更新」（或貼上網址）`);
+      };
+      if (!auth) return viaAccount('遊戲日誌裡找不到抽卡連結');
       progress({ stage: '確認帳號' });
-      const role = await ef.queryRole(auth);
-      const account = role
-        ? { id: `${auth.provider}-${role.id}`, name: role.name, server: role.server || (auth.provider === 'gryphline' ? '國際服' : '官服'), provider: auth.provider }
-        : { id: `${auth.provider}-server${auth.serverId}`, name: '', server: auth.provider === 'gryphline' ? '國際服' : '官服', provider: auth.provider };
-      const { data, added } = await pullEndfield(auth, account, progress);
-      return { ...view(gameId, data), added };
+      try {
+        const role = await ef.queryRole(auth);
+        const account = role
+          ? { id: `${auth.provider}-${role.id}`, name: role.name, server: role.server || (auth.provider === 'gryphline' ? '國際服' : '官服'), provider: auth.provider }
+          : { id: `${auth.provider}-server${auth.serverId}`, name: '', server: auth.provider === 'gryphline' ? '國際服' : '官服', provider: auth.provider };
+        // 查不到角色 = 連結多半已過期；不要另外建一個「server2」帳號，先試帳號登入
+        if (!role && !opts.url) return viaAccount('遊戲日誌裡的抽卡連結已過期');
+        const { data, added } = await pullEndfield(auth, account, progress);
+        return { ...view(gameId, data), added };
+      } catch (e) {
+        if (e.expired && !opts.url) return viaAccount('遊戲日誌裡的抽卡連結已過期');
+        throw e;
+      }
     }
     if (gameId === 'ZZMI') {
       let auth;
@@ -159,7 +178,20 @@ function register(ipcMain, ctx) {
       // 先查 uid，才知道要合併到哪個帳號、哪些紀錄已經有了
       progress({ stage: '確認帳號' });
       const uid = (await zzz.probeUid(auth)) || 'unknown';
-      const { data, added } = await pullZzz(auth, { id: uid, server: auth.region || auth.game_biz, uid }, progress);
+      const old = load('ZZMI', uid);
+      const { data, added } = await pullZzz(auth, { id: uid, uid, server: old?.account?.server || auth.region || auth.game_biz }, progress);
+      // 有登入 HoYoLAB 且是同一個 uid：順便更新官方統計（每期卡池、UP 判定、全部版本）
+      const role = (await login.hoyoRoles().catch(() => null))?.find((r) => r.uid === uid);
+      if (role) {
+        progress({ stage: '讀取 HoYoLAB 官方統計' });
+        try {
+          data.official = await login.hoyoOfficial(role);
+          data.account = { ...data.account, name: data.account.name || role.name };
+          save('ZZMI', data);
+        } catch (e) {
+          progress({ stage: `官方統計讀取失敗：${e.message}` });
+        }
+      }
       return { ...view(gameId, data), added };
     }
     throw new Error('這個遊戲還不支援抽卡紀錄');
@@ -193,7 +225,9 @@ function register(ipcMain, ctx) {
         for (const x of [...(p.cur_records || []), ...(p.cur_item_list || [])]) if (x.icon && x.name) icons[normalizeName(x.name)] = icons[normalizeName(x.name)] || x.icon;
       }
     }
-    const v = gameId === 'EFMI' ? visual.buildEndfield(d.records, loadPools(), icons) : visual.buildZzz(d.records, d.official, icons);
+    const v = gameId === 'EFMI'
+      ? visual.mergeHistory(visual.buildEndfield(d.records, loadPools(), icons), d.history, d.records, icons)
+      : visual.buildZzz(d.records, d.official, icons);
     return {
       account: d.account,
       updatedAt: d.updatedAt,
@@ -241,9 +275,18 @@ function register(ipcMain, ctx) {
     const r = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'ModHub 抽卡紀錄 JSON', extensions: ['json'] }] });
     if (r.canceled || !r.filePaths[0]) return null;
     const j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
+    // 離愁軒摘要（各池卡片：{ limited, weapon, standard, newbie, joint }）→ 補到最近的終末地帳號
+    if (gameId === 'EFMI' && !j.app && (Array.isArray(j.limited) || Array.isArray(j.weapon))) {
+      const acc = accounts('EFMI')[0];
+      if (!acc) throw new Error('請先用帳號更新一次終末地紀錄，再匯入離愁軒摘要');
+      const d = load('EFMI', acc.id);
+      d.history = lcx.parse(j);
+      save('EFMI', d);
+      return view(gameId, d);
+    }
     if (j.app !== 'ModHub' || j.game !== gameId || !Array.isArray(j.records) || !j.account?.id) throw new Error('不是這個遊戲的 ModHub 抽卡紀錄檔');
     const old = load(gameId, j.account.id);
-    const data = { account: { ...j.account, ...old?.account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, j.records) };
+    const data = { ...old, account: { ...j.account, ...old?.account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, j.records) };
     save(gameId, data);
     return view(gameId, data);
   });

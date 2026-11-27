@@ -307,3 +307,13 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => app.quit());
+
+// 關閉前把官方帳號登入分區的 cookie 寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
+let flushed = false;
+app.on('before-quit', (e) => {
+  if (flushed) return;
+  e.preventDefault();
+  flushed = true;
+  const login = require('./gacha/login.cjs');
+  Promise.race([login.flushAll(), new Promise((r) => setTimeout(r, 2000))]).finally(() => app.quit());
+});
