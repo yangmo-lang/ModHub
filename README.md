@@ -127,3 +127,12 @@ npm test         # 掃描/切換邏輯單元測試
 
 - 預設組合、透過 XXMI 啟動遊戲
 - 終末地新角色的英文名（`ENDFIELD_EN`）需要手動補
+
+## 授權
+
+ModHub 以 [MIT 授權](LICENSE) 釋出。
+
+- 打包的第三方套件各自依其授權：React、node-unrar-js、7zip-bin（MIT）、opencc-js（MIT 與 Apache-2.0）；
+  7zip-bin 內含的 `7za.exe` 屬於 7-Zip（GNU LGPL 與 unRAR 授權限制）
+- 遊戲名稱、角色名稱與圖片屬於各自的權利人（HoYoverse、庫洛、鷹角網路等）；ModHub 是非官方工具，與上述公司無關
+- 圖鑑、卡池等資料於執行時從 nanoka.cc、森空島 wiki、akedata 與官方 API 讀取，不隨程式散布

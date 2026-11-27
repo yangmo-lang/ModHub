@@ -2,6 +2,12 @@
   "name": "modhub",
   "version": "0.1.0",
   "description": "一體式 3DMigoto/XXMI MOD 整合管理器（星穹鐵道 / 鳴潮 / 絕區零 / 終末地）",
+  "license": "MIT",
+  "author": "yangmo-lang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yangmo-lang/ModHub.git"
+  },
   "main": "electron/main.cjs",
   "private": true,
   "scripts": {
