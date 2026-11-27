@@ -147,3 +147,30 @@ test('掃描套用圖鑑：無封面也算分類、列出缺少角色、建立�
   const created = createCategory(root, '黄泉', avatar);
   assert.ok(fs.existsSync(path.join(created, '_cover.webp')));
 });
+
+test('終末地：舊快取讀取時補上對照表裡的英文名', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const chars = require('../electron/characters.cjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'modhub-efen-'));
+  try {
+    fs.mkdirSync(path.join(tmp, 'characters', 'EFMI'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'characters', 'EFMI', 'characters.json'), JSON.stringify({
+      characters: [
+        { id: '1', name: '诀', zh: '诀', en: '', aliases: ['诀'] },
+        { id: '2', name: '小刻', zh: '小刻', en: 'Kay', aliases: ['小刻', 'kay'] },
+        { id: '3', name: '男主', zh: '管理员（男）', en: 'Endministrator', aliases: ['男主'] },
+        { id: '4', name: '未知角色', zh: '未知角色', en: '', aliases: ['未知角色'] },
+      ],
+    }));
+    const d = chars.loadCache(tmp, 'EFMI');
+    const by = Object.fromEntries(d.characters.map((c) => [c.name, c]));
+    require('node:assert').equal(by['诀'].en, 'Arcane');
+    require('node:assert').ok(by['诀'].aliases.includes('arcane'), '英文名可用來搜尋 / 比對資料夾');
+    require('node:assert').equal(by['小刻'].en, 'Kay');
+    require('node:assert').equal(by['未知角色'].en, '', '對照表沒有的維持空白');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

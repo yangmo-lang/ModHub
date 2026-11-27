@@ -192,7 +192,7 @@ const ENDFIELD_EN = {
   阿列什: 'Alesh', 弧光: 'Arclight', 艾维文娜: 'Avywenna', 大潘: 'Da Pan', 昼雪: 'Snowshine', 狼卫: 'Wulfgard',
   安塔尔: 'Antal', 卡契尔: 'Catcher', 埃特拉: 'Estella', 萤石: 'Fluorite', 汤汤: 'Tangtang', 洛茜: 'Rossi',
   庄方宜: 'Zhuang Fangyi', 小刻: 'Kay', 管理员男: 'Endministrator', 管理员女: 'Endministrator',
-  // endfield.gg 官方英文名（依職業 / 陣營對照）
+  // endfield.gg 官方英文名（2026-11-28 依 endfield.gg/operators 的職業 / 陣營與讀音核對；米米诺為前瞻，尚無英文名）
   诀: 'Arcane', 明河: 'Argent Flow', 卡缪: 'Camille', 梨诺: 'Liino', 弭弗: 'Mi Fu', 祀: 'Si', 提弗洛斯: 'Typhoeus', 噗切娜: 'Purrchena',
 };
 
@@ -264,11 +264,28 @@ function cacheDir(userDataDir, gameId) {
 }
 
 function loadCache(userDataDir, gameId) {
+  let data;
   try {
-    return JSON.parse(fs.readFileSync(path.join(cacheDir(userDataDir, gameId), 'characters.json'), 'utf8'));
+    data = JSON.parse(fs.readFileSync(path.join(cacheDir(userDataDir, gameId), 'characters.json'), 'utf8'));
   } catch {
     return null;
   }
+  if (gameId === 'EFMI') applyEndfieldEn(data);
+  return data;
+}
+
+/**
+ * 終末地英文名只在同步時寫進快取；對照表之後補上的名字，讀快取時也套用（不用重新同步）
+ */
+function applyEndfieldEn(data) {
+  for (const c of data?.characters || []) {
+    if (c.en || !c.zh || c.name === '男主' || c.name === '女主') continue;
+    const en = ENDFIELD_EN[normalizeName(c.zh)] || ENDFIELD_EN[c.zh];
+    if (!en) continue;
+    c.en = en;
+    c.aliases = [...new Set([...(c.aliases || []), normalizeName(en)])];
+  }
+  return data;
 }
 
 async function loadNanoka(gameId) {
