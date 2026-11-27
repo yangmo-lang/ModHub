@@ -167,7 +167,8 @@ function mergeHistory(vis, history, records, icons = {}) {
         upIcon: null,
         entries,
         tops: summarizeTops(entries),
-        history: label,
+        history: b.source || label,
+        note: b.note || null,
       });
       if (whole && b.total != null) { addPulls += b.total; addFree += b.free || 0; }
       addTops += t.length;

@@ -120,3 +120,16 @@ test('離愁軒摘要：只補 ModHub 紀錄之前的卡池，常駐只補之前
   assert.deepEqual(old.entries.map((e) => e.name), ['別禮'], '9/2 之後的 6★ 不補');
   assert.equal(old.pulls, null);
 });
+
+test('摘要合併：同名卡池以新的為準，標示來源與備註', () => {
+  const lcx = require('../electron/gacha/lcx.cjs');
+  const now = Date.parse('2026-11-27T12:00:00');
+  const a = lcx.parse({ limited: [{ head: '临渊望北 07月17日 ~ 07月18日 合计 6 抽 垫6', items: [{ pull: 6, stamps: ['暂未出货'] }] }] }, { now });
+  const b = lcx.parse({ limited: [{ source: '截圖', note: '缺頁', head: '临渊望北 07月16日 ~ 07月18日 合计 60 抽 垫57', items: [{ pull: 57, stamps: ['暂未出货'] }, { six: '訣', pull: 11, date: '07-16', stamps: [] }] }] }, { now });
+  const m = lcx.mergeInto(a, b);
+  const list = m.groups['char:E_CharacterGachaPoolType_Special'];
+  assert.equal(list.length, 1);
+  assert.equal(list[0].total, 60);
+  assert.equal(list[0].source, '截圖');
+  assert.equal(list[0].note, '缺頁');
+});

@@ -72,11 +72,21 @@ function parse(scraped, { now = Date.now() } = {}) {
           entries.push({ type: 'free', count, time: h.start });
         }
       }
-      banners.push({ ...h, free, paid: h.total, entries });
+      banners.push({ ...h, free, paid: h.total, entries, ...(card.source ? { source: card.source } : {}), ...(card.note ? { note: card.note } : {}) });
     }
     groups[key] = banners.sort((a, b) => a.end - b.end);
   }
   return { source: 'lcx', fetchedAt: now, groups };
 }
 
-module.exports = { parse, parseHead, GROUP_KEY };
+/** 把另一份摘要併進現有的 history：同類型同名的卡池以新的為準 */
+function mergeInto(history, extra) {
+  const out = { ...(history || { source: extra.source, groups: {} }), groups: { ...(history?.groups || {}) } };
+  for (const [key, banners] of Object.entries(extra.groups || {})) {
+    const names = new Set(banners.map((b) => b.name));
+    out.groups[key] = [...(out.groups[key] || []).filter((b) => !names.has(b.name)), ...banners].sort((a, b) => a.end - b.end);
+  }
+  return out;
+}
+
+module.exports = { parse, parseHead, mergeInto, GROUP_KEY };

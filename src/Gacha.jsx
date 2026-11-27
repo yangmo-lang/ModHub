@@ -232,7 +232,7 @@ function GroupView({ group, T, onOpen }) {
               <span>
                 {b.pulls != null ? <>總計 <b>{b.pulls - (b.free || 0)}</b>{b.free ? <> + <em>{b.free}</em></> : null} 抽</> : `${b.tops.reduce((s, t) => s + t.count, 0)} 個 ${T.top}`}
                 {b.current ? <span className="g-live">進行中</span> : null}
-                {b.history ? <span className="g-src">{b.history}</span> : <span className="g-more">逐抽 ›</span>}
+                {b.history ? <span className="g-src" title={b.note || ''}>{b.history}{b.note ? ' ⚠' : ''}</span> : <span className="g-more">逐抽 ›</span>}
               </span>
             </div>
 
@@ -285,7 +285,7 @@ function GroupView({ group, T, onOpen }) {
             {past.map((b) => (
               <div key={b.id} className="g-past-card" onClick={() => onOpen(b)} role="button">
                 <div className="g-past-head">
-                  <b>{b.name}{b.history ? <span className="g-src">{b.history}</span> : null}</b>
+                  <b>{b.name}{b.history ? <span className="g-src" title={b.note || ''}>{b.history}{b.note ? ' ⚠' : ''}</span> : null}</b>
                   <small>{b.version ? `v${b.version} · ` : ''}{b.pulls != null ? `總計 ${b.pulls - (b.free || 0)}${b.free ? ` + ${b.free}` : ''} 抽` : ''}</small>
                 </div>
                 <div className="g-past-tops">
