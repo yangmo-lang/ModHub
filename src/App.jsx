@@ -449,9 +449,8 @@ export default function App() {
                       <input type="checkbox" checked={m.enabled} onChange={() => toggle(m)} disabled={busy} />
                       <span />
                     </label>
-                    {m.category !== UNCAT
-                      ? <button className="link" onClick={() => only(m)} disabled={busy} title="停用同分類其他 MOD">只用這個</button>
-                      : <button className="link" onClick={() => setPicker({ mode: 'move', mod: m })} disabled={busy} title="移到角色或分類資料夾">移入…</button>}
+                    {m.category !== UNCAT && <button className="link" onClick={() => only(m)} disabled={busy} title="停用同分類其他 MOD">只用這個</button>}
+                    <button className="link" onClick={() => setPicker({ mode: 'move', mod: m })} disabled={busy} title="移到其他角色或分類資料夾">{m.category !== UNCAT ? '移動…' : '移入…'}</button>
                     <button className="link" onClick={() => api.openPath(gameId, m.path)} title="在檔案總管開啟">開啟</button>
                   </div>
                 </div>
@@ -509,6 +508,8 @@ function Picker({ picker, characters, categories, onClose, onMap, onMove }) {
   const qq = q.trim().toLowerCase();
   const list = characters.filter((c) => !qq || `${c.name} ${c.nameTw} ${c.en}`.toLowerCase().includes(qq));
   const otherCats = isMap ? [] : categories.filter((c) => !c.character && (!qq || `${c.name} ${c.displayName}`.toLowerCase().includes(qq)));
+  // 移動時標出 MOD 目前所在的分類
+  const curCat = isMap ? null : categories.find((c) => c.name === picker.mod.category);
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal picker" onClick={(e) => e.stopPropagation()}>
@@ -516,7 +517,7 @@ function Picker({ picker, characters, categories, onClose, onMap, onMove }) {
         <input className="search" autoFocus placeholder="搜尋角色（中文 / 英文）" value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="pick-grid">
           {list.map((c) => {
-            const current = isMap && picker.category.character?.id === c.id;
+            const current = isMap ? picker.category.character?.id === c.id : curCat?.character?.id === c.id;
             return (
               <button key={c.id} className={`pick ${current ? 'current' : ''}`} onClick={() => (isMap ? onMap(c.id) : onMove({ charId: c.id }, c.nameTw))}>
                 <Avatar src={c.avatar} name={c.nameTw} className="pick-img" />
@@ -525,7 +526,7 @@ function Picker({ picker, characters, categories, onClose, onMap, onMove }) {
             );
           })}
           {otherCats.map((c) => (
-            <button key={c.name} className="pick" onClick={() => onMove({ categoryName: c.name }, c.displayName)}>
+            <button key={c.name} className={`pick ${curCat?.name === c.name ? 'current' : ''}`} onClick={() => onMove({ categoryName: c.name }, c.displayName)}>
               <Avatar src={c.cover} name={c.displayName} className="pick-img" />
               <span>{c.displayName}</span>
             </button>
