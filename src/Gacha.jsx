@@ -108,7 +108,7 @@ export default function Gacha({ gameId, gameName, showToast }) {
   };
 
   if (supported && !supported.includes(gameId)) {
-    return <div className="gacha"><div className="empty">{gameName}的抽卡紀錄還不支援（目前支援終末地、絕區零）</div></div>;
+    return <div className="gacha"><div className="empty">{gameName}的抽卡紀錄還不支援（目前支援星鐵、絕區零、終末地）</div></div>;
   }
   if (!T) return null;
   const group = vis?.groups.find((g) => g.key === groupKey) || vis?.groups[0];
