@@ -59,3 +59,10 @@ test('翻譯：服務錯誤時丟出說明', async () => {
   assert.equal(applyGlossary('no glossary', []), 'no glossary');
   assert.equal((await translate('   ')).engine, 'none');
 });
+
+test('詞彙表：和一般單字同名的角色只在 MOD 本身是該角色時替換', () => {
+  const g = [{ en: 'Sunday', zh: '星期日' }, { en: 'Robin', zh: '知更鳥' }, { en: 'Firefly', zh: '流螢' }];
+  assert.equal(applyGlossary('Firefly skin, updated on Sunday', g), '流螢 skin, updated on Sunday');
+  const primary = g.map((x) => ({ ...x, primary: x.en === 'Robin' }));
+  assert.equal(applyGlossary('Robin outfit for Sunday', primary), '知更鳥 outfit for Sunday');
+});

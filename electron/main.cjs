@@ -36,6 +36,7 @@ const updater = require('./updater.cjs');
 const blueprint = require('./blueprint.cjs');
 const presets = require('./presets.cjs');
 const launcher = require('./launcher.cjs');
+const { createModsWatcher } = require('./watcher.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -229,10 +230,17 @@ app.whenReady().then(() => {
     };
   };
 
+  // 外部（檔案總管等）改動 Mods 資料夾時通知介面；監看的是最近一次掃描的遊戲
+  const modsWatcher = createModsWatcher({
+    onChange: (gameId) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send('mods:changed', { gameId }); },
+  });
+  app.on('will-quit', () => modsWatcher.stop());
+
   ipcMain.handle('mods:scan', (_e, gameId) => {
     gameById(gameId);
     const modsDir = config.modsDirFor(settings, gameId);
-    if (!fs.existsSync(modsDir)) return { modsDir, missing: true, categories: [], mods: [] };
+    if (!fs.existsSync(modsDir)) { modsWatcher.stop(); return { modsDir, missing: true, categories: [], mods: [] }; }
+    modsWatcher.set(gameId, modsDir);
     const { c } = matcherFor(gameId);
     const result = scanner.scanMods(modsDir, scanOptions(gameId));
     const manual = settings.manualMap?.[gameId] || {};

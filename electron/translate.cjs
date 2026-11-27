@@ -49,10 +49,21 @@ function chunks(text, max = CHUNK) {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** 角色英文名 → 中文名（長的先換，避免 "March 7th" 被 "March" 搶先；前後不能接英數字） */
+// 和一般英文單字相同的角色名：說明裡多半是原本的意思（Sunday = 星期日、trigger = 觸發），
+// 只有這個 MOD 本身就是該角色（primary）時才換成角色名
+const AMBIGUOUS = new Set([
+  'sunday', 'robin', 'blade', 'jade', 'hook', 'cipher', 'saber', 'archer', 'sparkle',
+  'grace', 'lighter', 'trigger', 'alice', 'rover', 'encore', 'ember', 'catcher', 'fluorite', 'arclight',
+]);
+
+/**
+ * 角色英文名 → 中文名（長的先換，避免 "March 7th" 被 "March" 搶先；前後不能接英數字）
+ * glossary 項目：{ en, zh, primary? }；primary = 這個 MOD 所屬的角色
+ */
 function applyGlossary(text, glossary) {
   const pairs = (glossary || [])
     .filter((g) => g && g.en && g.zh && g.en.length >= 3 && !/[{}<>]/.test(g.en))
+    .filter((g) => g.primary || !AMBIGUOUS.has(g.en.trim().toLowerCase()))
     .sort((a, b) => b.en.length - a.en.length);
   if (!pairs.length) return text;
   const map = new Map(pairs.map((g) => [g.en.toLowerCase(), g.zh]));
@@ -101,4 +112,4 @@ async function translate(text, { glossary, fetchImpl = fetch, retryDelay } = {})
   return result;
 }
 
-module.exports = { translate, isChinese, chunks, applyGlossary, toTraditional, ENDPOINT };
+module.exports = { translate, isChinese, chunks, applyGlossary, toTraditional, ENDPOINT, AMBIGUOUS };

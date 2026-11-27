@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('modhub', {
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   scan: (gameId) => ipcRenderer.invoke('mods:scan', gameId),
+  onModsChanged: on('mods:changed'),
   setEnabled: (gameId, modPath, enabled) => ipcRenderer.invoke('mods:setEnabled', gameId, modPath, enabled),
   trashMod: (gameId, modPath) => ipcRenderer.invoke('mods:trash', gameId, modPath),
   openPath: (gameId, p) => ipcRenderer.invoke('shell:open', gameId, p),
@@ -65,7 +66,7 @@ contextBridge.exposeInMainWorld('modhub', {
   // 線上
   onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),
   onlineDetails: (gameId, source, modId) => ipcRenderer.invoke('online:details', gameId, source, modId),
-  onlineTranslate: (gameId, texts) => ipcRenderer.invoke('online:translate', gameId, texts),
+  onlineTranslate: (gameId, texts, opts) => ipcRenderer.invoke('online:translate', gameId, texts, opts),
   onlineDownload: (gameId, source, modId, fileId) => ipcRenderer.invoke('online:download', gameId, source, modId, fileId),
   pickArchives: (gameId) => ipcRenderer.invoke('local:pick', gameId),
   installFromPaths: (gameId, paths) => ipcRenderer.invoke('local:fromPaths', gameId, paths),

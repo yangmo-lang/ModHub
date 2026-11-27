@@ -1,6 +1,6 @@
 {
   "name": "modhub",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "一體式 3DMigoto/XXMI MOD 整合管理器（星穹鐵道 / 鳴潮 / 絕區零 / 終末地）",
   "license": "MIT",
   "author": "yangmo-lang",
@@ -43,7 +43,9 @@
     "files": [
       "electron/**/*",
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/7zip-bin/{linux,mac}/**",
+      "!node_modules/7zip-bin/win/{arm64,ia32}/**"
     ],
     "asarUnpack": [
       "node_modules/7zip-bin/**"

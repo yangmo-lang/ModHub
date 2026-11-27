@@ -129,19 +129,27 @@ export default function App() {
   useEffect(() => { loadState(); }, [loadState]);
 
   // 一律掃描「目前」選中的遊戲；切換遊戲後才回來的舊結果直接丟掉
-  const rescan = useCallback(async () => {
+  // silent：資料夾自動監看觸發的掃描，不顯示「掃描中」也不跳錯誤提示
+  const rescan = useCallback(async (opts) => {
     const g = gameRef.current;
     if (!g) return;
-    setBusy(true);
+    const silent = opts?.silent === true;
+    if (!silent) setBusy(true);
     try {
       const d = await api.scan(g);
       if (g === gameRef.current) setData({ ...d, gameId: g });
     } catch (e) {
-      if (g === gameRef.current) showToast(errText(e), 'error');
+      if (g === gameRef.current && !silent) showToast(errText(e), 'error');
     } finally {
-      if (g === gameRef.current) setBusy(false);
+      if (g === gameRef.current && !silent) setBusy(false);
     }
   }, [showToast]);
+
+  // 在檔案總管新增 / 刪除 / 改名 MOD 後自動更新清單
+  useEffect(
+    () => api.onModsChanged(({ gameId: g }) => { if (g === gameRef.current) rescan({ silent: true }); }),
+    [rescan],
+  );
 
   useEffect(() => {
     setCategory(ALL);

@@ -153,7 +153,7 @@ function useTranslation(gameId, d) {
     setTr({ loading: true });
     setShowOriginal(false);
     try {
-      const r = await api.onlineTranslate(gameId, texts);
+      const r = await api.onlineTranslate(gameId, texts, { charId: d.suggest?.charId ?? null });
       const google = r.find((x) => x.engine === 'google');
       setTr({
         desc: r[0].text,

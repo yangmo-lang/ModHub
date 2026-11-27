@@ -97,9 +97,11 @@ function register(ipcMain, ctx) {
   });
 
   // 說明翻譯成繁體中文：texts = 字串陣列（說明、各檔案說明），用圖鑑角色名當詞彙表
-  ipcMain.handle('online:translate', async (_e, gameId, texts) => {
+  // opts.charId：這個 MOD 所屬的角色（annotate 的 suggest），和一般單字同名的角色名只在這時才換
+  ipcMain.handle('online:translate', async (_e, gameId, texts, opts) => {
     const chars = ctx.matcherFor(gameId)?.c?.data.characters || [];
-    const glossary = chars.map((c) => ({ en: c.en, zh: c.nameTw || c.name }));
+    const primaryId = opts?.charId == null ? null : String(opts.charId);
+    const glossary = chars.map((c) => ({ en: c.en, zh: c.nameTw || c.name, primary: primaryId !== null && String(c.id) === primaryId }));
     const out = [];
     for (const t of (Array.isArray(texts) ? texts : []).slice(0, 40)) {
       out.push(await translator.translate(String(t || '').slice(0, 20000), { glossary }));
