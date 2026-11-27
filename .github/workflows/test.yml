@@ -18,7 +18,5 @@ jobs:
           node-version: lts/*
           cache: npm
       - run: npm ci
-      # npm 11 預設不執行套件安裝腳本；updater 測試會 require('electron')，需要 Electron 本體
-      - run: node node_modules/electron/install.js
       - run: npm test
       - run: npx --no-install vite build

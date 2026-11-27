@@ -3,7 +3,8 @@
 //   下載完按「重新啟動並更新」（或下次關閉程式時）安裝。安裝包的 SHA-512 由 electron-updater 依 latest.yml 校驗。
 // - 免安裝版（portable）：electron-updater 不支援，只查 GitHub 最新版並提示到 Releases 頁面下載。
 // - 開發模式（npm start / dev）：不檢查。
-const { app, shell } = require('electron');
+// electron 在用到時才載入：newer() 是純函式，測試時不需要 Electron 本體
+const electron = () => require('electron');
 
 const REPO = 'yangmo-lang/ModHub';
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
@@ -19,12 +20,14 @@ function newer(a, b) {
 }
 
 function mode() {
+  const { app } = electron();
   if (!app.isPackaged) return 'dev';
   if (process.env.PORTABLE_EXECUTABLE_DIR) return 'portable';
   return 'installer';
 }
 
 function register(ipcMain, { emit }) {
+  const { app, shell } = electron();
   let state = { mode: mode(), version: app.getVersion(), status: 'idle' };
   const set = (patch) => { state = { ...state, ...patch }; emit('update:status', state); return state; };
 
