@@ -109,6 +109,14 @@ npm test         # 掃描/切換邏輯單元測試
 - 登入 cookie 在登入後、呼叫官方 API 後與關閉程式前立即寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
 - 尚未支援：UIGF 標準格式匯入匯出
 
+### 終末地 AIC 藍圖
+
+- 選終末地時多一個「藍圖」分頁：依國服 / 亞服 / 歐美服列出畢業藍圖碼，按「複製」後在遊戲 AIC 藍圖介面貼上；另列教學影片與基地一圖流圖片
+- 資料來源：[終末地一圖流](https://ef.yituliu.cn/aic/blueprint)，內容採 CC BY-NC 4.0（前端程式碼 GPL-3.0）。
+  ModHub **不內建也不複製**這些內容：執行時讀取他們公開 repo（`Arknights-yituliu/ef-frontend-v1`）的
+  `app/pages/aic/blueprint.vue`，以純文字解析出藍圖碼（不執行任何程式碼），快取在 `%APPDATA%\modhub\blueprints\`（6 小時）；
+  畫面上標示來源、授權與變更（名稱轉繁體，藍圖碼不改）。讀取失敗時顯示上次的快取
+
 ### 線上下載（GameBanana / Nexus Mods）
 
 - 「線上下載」分頁：最新 / 最近更新 / 熱門、關鍵字或依角色搜尋，預設隱藏成人內容

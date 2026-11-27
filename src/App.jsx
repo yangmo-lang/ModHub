@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Online from './Online.jsx';
 import Codex from './Codex.jsx';
+import Blueprint from './Blueprint.jsx';
 import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
@@ -146,6 +147,7 @@ export default function App() {
     setData({ categories: [], mods: [] });
     rescan();
     if (gameId) api.saveSettings({ lastGame: gameId });
+    if (gameId && gameId !== 'EFMI') setView((v) => (v === 'blueprint' ? 'local' : v));
   }, [gameId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncChars = useCallback(async (silent = false) => {
@@ -303,7 +305,7 @@ export default function App() {
 
   return (
     <div
-      className={`app ${dragOver ? 'drag' : ''} ${view === 'planner' || view === 'gacha' ? 'no-cats' : ''}`}
+      className={`app ${dragOver ? 'drag' : ''} ${view === 'planner' || view === 'gacha' || view === 'blueprint' ? 'no-cats' : ''}`}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target || !e.relatedTarget) setDragOver(false); }}
       onDrop={onDrop}
@@ -400,10 +402,13 @@ export default function App() {
           <button className={view === 'codex' ? 'active' : ''} onClick={() => setView('codex')}>圖鑑 / 前瞻</button>
           <button className={view === 'planner' ? 'active' : ''} onClick={() => setView('planner')}>養成計算</button>
           <button className={view === 'gacha' ? 'active' : ''} onClick={() => setView('gacha')}>抽卡紀錄</button>
+          {gameId === 'EFMI' && <button className={view === 'blueprint' ? 'active' : ''} onClick={() => setView('blueprint')}>藍圖</button>}
           <div className="spacer" />
           <button className="btn small" onClick={async () => { const r = await api.pickArchives(gameId); if (r.length) showToast(`準備安裝 ${r.length} 個壓縮檔`); }}>📦 從壓縮檔安裝</button>
         </div>
-        {view === 'gacha' ? (
+        {view === 'blueprint' && gameId === 'EFMI' ? (
+          <Blueprint showToast={showToast} />
+        ) : view === 'gacha' ? (
           <Gacha gameId={gameId} gameName={game?.name || ''} showToast={showToast} />
         ) : view === 'planner' ? (
           <Planner gameId={gameId} gameName={game?.name || ''} showToast={showToast} />

@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('modhub', {
   nexusClearKey: () => ipcRenderer.invoke('nexus:clearKey'),
   nxmRegister: () => ipcRenderer.invoke('nxm:register'),
   nxmUnregister: () => ipcRenderer.invoke('nxm:unregister'),
+  blueprintGet: (force) => ipcRenderer.invoke('blueprint:get', force),
   updateState: () => ipcRenderer.invoke('update:state'),
   updateCheck: () => ipcRenderer.invoke('update:check'),
   updateDownload: () => ipcRenderer.invoke('update:download'),
