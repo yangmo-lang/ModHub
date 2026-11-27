@@ -35,7 +35,12 @@ input { font: inherit; }
 .game:hover { background: var(--panel); }
 .game.active { background: var(--panel-2); border-color: var(--accent); }
 .game.missing { opacity: 0.4; }
-.game-badge { font-weight: 700; font-size: 14px; }
+/* 找不到 XXMI 圖塊時的替代卡片：同比例、各遊戲一個漸層色 */
+.game-badge { display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; letter-spacing: 2px; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+.badge-srmi { background: linear-gradient(135deg, #2b2d6e, #7a5cc4 60%, #e7b86a); }
+.badge-wwmi { background: linear-gradient(135deg, #10282f, #2f7d82 60%, #d9e6e0); }
+.badge-zzmi { background: linear-gradient(135deg, #111, #3a3a3a 55%, #c8f03c); }
+.badge-efmi { background: linear-gradient(135deg, #1b1f24, #4b5563 55%, #f2c94c); }
 .game-id { font-size: 11px; color: var(--muted); }
 .spacer { flex: 1; }
 .settings-btn { font-size: 13px; }

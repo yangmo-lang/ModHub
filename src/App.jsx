@@ -314,7 +314,7 @@ export default function App() {
             onClick={() => setGameId(g.id)} title={`${g.name}${g.available ? '' : `（找不到 ${g.modsDir}）`}`}>
             {g.logo
               ? <img className="game-logo" src={img(g.logo)} alt={g.name} draggable="false" />
-              : <span className="game-badge">{g.short}</span>}
+              : <span className={`game-logo game-badge badge-${g.id.toLowerCase()}`} title="找不到 XXMI Launcher 的遊戲圖塊，請在設定確認 XXMI 資料夾">{g.short}</span>}
             <span className="game-id">{g.short}</span>
           </button>
         ))}
