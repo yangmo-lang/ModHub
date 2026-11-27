@@ -23,6 +23,19 @@ npm test         # 掃描/切換邏輯單元測試
 - 「刪除」：確認後把 MOD 資料夾移到資源回收筒（可還原）；同角色多個 MOD 同時啟用時分類旁顯示警告
 - 搜尋、啟用狀態篩選、預覽圖、在檔案總管開啟
 
+### 透過 XXMI 啟動遊戲
+
+- 分頁列右邊的「▶ 啟動<遊戲>」：與 XXMI 的「Quick Start」捷徑相同（`XXMI Launcher.exe --nogui --xxmi <SRMI|WWMI|ZZMI|EFMI>`），載入 MOD 並啟動遊戲
+- 「XXMI」按鈕：開啟 XXMI Launcher 視窗並切到該遊戲；找不到 `<XXMI 資料夾>ResourcesBinXXMI Launcher.exe` 時不顯示這兩個按鈕
+
+### 預設組合
+
+- 「🗂 預設組合」：把目前「哪些 MOD 啟用」存成組合（例如日常、拍照用），之後一鍵切換；可覆蓋、改名、刪除
+- 套用 = 組合裡的 MOD 啟用、其他 MOD 停用（只改 `DISABLED_` 前綴，可還原）；套用前會先列出要啟用 / 停用的 MOD 與找不到的 MOD
+- 每次套用前自動把當時狀態存成「套用前的狀態」，套錯了可以切回來
+- MOD 以「相對 Mods 的路徑、去掉 `DISABLED_`」辨識（例如 `流萤/SkinA`）；MOD 改名或移動到其他分類後，組合裡的舊項目會列為找不到
+- 組合存在 `%APPDATA%\modhub\presets.json`（每個遊戲分開）
+
 ### 角色圖鑑
 
 - 星鐵 / 鳴潮 / 絕區零：nanoka.cc，`static.nanoka.cc/manifest.json` → `static.nanoka.cc/<hsr|ww|zzz>/<版本>/character.json`（最新版本，含前瞻角色）
@@ -42,6 +55,9 @@ npm test         # 掃描/切換邏輯單元測試
 ## 結構
 
 - `electron/scanner.cjs` 掃描與切換（純 Node，有測試）
+- `electron/presets.cjs` 預設組合（純 Node，有測試）
+- `electron/launcher.cjs` 透過 XXMI Launcher 啟動遊戲
+- `electron/gacha/uigf.cjs` UIGF / SRGF 轉換（有測試）
 - `electron/config.cjs` 遊戲定義、設定檔（存在 Electron userData）
 - `electron/main.cjs` 視窗、IPC、`modimg://` 圖片協定（只允許 Mods 目錄內）
 - `src/` React 介面
@@ -107,7 +123,8 @@ npm test         # 掃描/切換邏輯單元測試
     克拉拉、彥卿、白露與 7 把常駐光錐，加上群星躍遷出過的）判定為歪；保底跨期累計
   - 沒有官方統計時，限定池依抽卡時間分期（6 天沒抽或超過 21 天算下一期），卡池名稱 = 該期出的 UP；保底跨期累計
 - 登入 cookie 在登入後、呼叫官方 API 後與關閉程式前立即寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
-- 尚未支援：UIGF 標準格式匯入匯出
+- **UIGF**（星鐵 / 絕區零）：「匯出 UIGF」輸出 [UIGF v4.0](https://uigf.org) 標準格式；「匯入」可讀 UIGF v4（含多個 uid，各自合併到對應帳號）與舊的 SRGF v1，
+  時間依檔案的 timezone 換算；格式不符的紀錄會略過並顯示筆數。終末地不在 UIGF 範圍內，仍用 ModHub JSON
 
 ### 終末地 AIC 藍圖
 
@@ -115,7 +132,9 @@ npm test         # 掃描/切換邏輯單元測試
 - 資料來源：[終末地一圖流](https://ef.yituliu.cn/aic/blueprint)，內容採 CC BY-NC 4.0（前端程式碼 GPL-3.0）。
   ModHub **不內建也不複製**這些內容：執行時讀取他們公開 repo（`Arknights-yituliu/ef-frontend-v1`）的
   `app/pages/aic/blueprint.vue`，以純文字解析出藍圖碼（不執行任何程式碼），快取在 `%APPDATA%\modhub\blueprints\`（6 小時）；
-  畫面上標示來源、授權與變更（名稱轉繁體，藍圖碼不改）。讀取失敗時顯示上次的快取
+  畫面上標示來源、授權與變更（名稱轉繁體，藍圖碼不改）。讀取失敗時顯示上次的快取，並在畫面上說明原因
+- 一圖流改版的因應：解析不依賴固定排版（欄位順序、型別註記、陣列寫法改變都能讀）；預設位置讀不到時，
+  先試上次成功的位置，再列出 repo 檔案樹找含 `blueprint` 的檔案（`aic/` 優先），找到就改讀新位置並在畫面上標示
 
 ### 線上下載（GameBanana / Nexus Mods）
 
@@ -133,7 +152,6 @@ npm test         # 掃描/切換邏輯單元測試
 
 ## 待辦
 
-- 預設組合、透過 XXMI 啟動遊戲
 - 終末地新角色的英文名（`ENDFIELD_EN`）需要手動補
 
 ## 授權

@@ -53,3 +53,53 @@ test('藍圖：格式改變時回傳空資料而不是丟錯', () => {
   assert.deepEqual(parse('<html>nothing</html>').regions, []);
   assert.deepEqual(parse(null).regions, []);
 });
+
+test('藍圖：欄位順序、型別註記、陣列結尾格式改變也讀得到', () => {
+  const src = `<script setup>
+const cnList = ref([
+  { title: '第一区', type: 'section' }, { code: 'EF01AAAAbbbb1111', label: '产线 [1]', type: 'code' } ]);
+const servers = [{ entries: cnList, title: '国服', key: 'cn' }];
+</script>`;
+  const d = parse(src);
+  assert.deepEqual(d.regions, [{ key: 'cn', title: '国服', entries: [
+    { type: 'section', title: '第一区' },
+    { type: 'code', label: '产线 [1]', code: 'EF01AAAAbbbb1111' },
+  ] }]);
+});
+
+test('藍圖：沒有伺服器清單時，每個含藍圖碼的陣列各算一區', () => {
+  const src = `const asiaEntries = [
+  { name: '线 A', code: 'EF01CCCCdddd2222' },
+];
+const euUsEntries = [{ label: '线 B', code: 'EF01EEEEffff3333' }];`;
+  const d = parse(src);
+  assert.deepEqual(d.regions.map((r) => [r.key, r.title, r.entries[0].label]), [['asia', '亚服蓝图码', '线 A'], ['eu-us', '欧美服蓝图码', '线 B']]);
+});
+
+test('藍圖：原檔搬走時從 repo 檔案樹找新位置', async () => {
+  const { locateSource, rankCandidates, SOURCE_URL } = require('../electron/blueprint.cjs');
+  assert.deepEqual(rankCandidates(['app/pages/blueprint/x.vue', 'README.md', 'app/pages/aic/blueprint/index.vue', 'types/blueprint.d.ts']),
+    ['app/pages/aic/blueprint/index.vue', 'app/pages/blueprint/x.vue']);
+  const files = {
+    'app/pages/aic/blueprint/index.vue': `const cnEntries = [{ type: 'code', label: 'L', code: 'EF01AAAAbbbb1111' }];`,
+  };
+  const fetched = [];
+  const fetchText = async (url) => {
+    fetched.push(url);
+    const p = Object.keys(files).find((k) => url.endsWith(k));
+    if (!p) throw new Error('HTTP 404');
+    return files[p];
+  };
+  const fetchJson = async () => ({ tree: [{ type: 'blob', path: 'app/pages/aic/blueprint/index.vue' }, { type: 'blob', path: 'README.md' }] });
+  const r = await locateSource(fetchText, fetchJson, null);
+  assert.equal(r.relocated, true);
+  assert.ok(r.url.endsWith('/dev/app/pages/aic/blueprint/index.vue'));
+  assert.equal(r.parsed.regions[0].entries[0].code, 'EF01AAAAbbbb1111');
+  assert.equal(fetched[0], SOURCE_URL);
+  // 下次先試上次成功的位置
+  fetched.length = 0;
+  await locateSource(fetchText, fetchJson, r.url);
+  assert.deepEqual(fetched, [r.url]);
+  // 全都失敗時丟出說明
+  await assert.rejects(locateSource(async () => 'nothing', async () => ({ tree: [] }), null), /讀不到藍圖碼/);
+});

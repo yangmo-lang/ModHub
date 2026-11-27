@@ -4,6 +4,7 @@ import Codex from './Codex.jsx';
 import Blueprint from './Blueprint.jsx';
 import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
+import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 
 const api = window.modhub;
@@ -61,6 +62,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [xxmiOk, setXxmiOk] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [syncing, setSyncing] = useState(null);
   const [sort, setSort] = useState('release');
   const [facet, setFacet] = useState({ element: '', role: '', rarity: '', hasMods: false });
@@ -118,6 +122,7 @@ export default function App() {
   const loadState = useCallback(async () => {
     const s = await api.getState();
     setState(s);
+    api.xxmiAvailable().then(setXxmiOk).catch(() => setXxmiOk(false));
     setShowAdultState(Boolean(s.settings.showAdult));
     setGameId((cur) => cur || s.settings.lastGame || s.games[0].id);
   }, []);
@@ -145,6 +150,7 @@ export default function App() {
     setBusy(false);
     setFacet({ element: '', role: '', rarity: '', hasMods: false });
     setData({ categories: [], mods: [] });
+    setShowPresets(false);
     rescan();
     if (gameId) api.saveSettings({ lastGame: gameId });
     if (gameId && gameId !== 'EFMI') setView((v) => (v === 'blueprint' ? 'local' : v));
@@ -280,6 +286,17 @@ export default function App() {
     installFiles([...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean));
   };
   const dismissJob = (j) => api.cancelJob(j.id);
+  const launchGame = async (gui) => {
+    setLaunching(true);
+    try {
+      await api.xxmiLaunch(gameId, { gui });
+      showToast(gui ? `已開啟 XXMI Launcher（${game?.short}）` : `正在透過 XXMI 啟動「${game?.name}」…`);
+    } catch (e) {
+      showToast(errText(e), 'error');
+    } finally {
+      setTimeout(() => setLaunching(false), 3000); // 避免連點重複啟動
+    }
+  };
   const gameNames = Object.fromEntries((state?.games || []).map((g) => [g.id, g.short]));
 
   if (!state) return <div className="loading">載入中…</div>;
@@ -405,6 +422,13 @@ export default function App() {
           {gameId === 'EFMI' && <button className={view === 'blueprint' ? 'active' : ''} onClick={() => setView('blueprint')}>藍圖</button>}
           <div className="spacer" />
           <button className="btn small" onClick={async () => { const r = await api.pickArchives(gameId); if (r.length) showToast(`準備安裝 ${r.length} 個壓縮檔`); }}>📦 從壓縮檔安裝</button>
+          {xxmiOk && (
+            <span className="launch-group">
+              <button className="btn small primary" onClick={() => launchGame(false)} disabled={launching}
+                title="與 XXMI 的 Quick Start 捷徑相同：載入 MOD 並啟動遊戲">{launching ? '啟動中…' : `▶ 啟動${game?.short || ''}`}</button>
+              <button className="btn small" onClick={() => launchGame(true)} disabled={launching} title="開啟 XXMI Launcher 視窗">XXMI</button>
+            </span>
+          )}
         </div>
         {view === 'blueprint' && gameId === 'EFMI' ? (
           <Blueprint showToast={showToast} />
@@ -432,6 +456,7 @@ export default function App() {
             ))}
           </div>
           <button className="btn" onClick={rescan} disabled={busy}>{busy ? '掃描中…' : '↻ 重新掃描'}</button>
+          {!data.missing && data.modsDir && <button className="btn" onClick={() => setShowPresets(true)} disabled={busy} title="儲存或切換一組 MOD 的啟用狀態">🗂 預設組合</button>}
           {data.modsDir && <button className="btn" onClick={() => api.openPath(gameId, data.modsDir)}>📂 Mods 資料夾</button>}
         </header>
 
@@ -499,6 +524,24 @@ export default function App() {
           onClose={() => setPicker(null)}
           onMap={(charId) => { applyMapping(picker.category, charId); setPicker(null); }}
           onMove={(target, label) => { moveMod(picker.mod, target, label); setPicker(null); }}
+        />
+      )}
+
+      {showPresets && (
+        <Presets
+          gameId={gameId}
+          gameName={game?.name || ''}
+          enabledCount={totalOn}
+          showToast={showToast}
+          onClose={() => setShowPresets(false)}
+          onApplied={(p, r) => {
+            setShowPresets(false);
+            const parts = [`啟用 ${r.enabled}`, `停用 ${r.disabled}`];
+            if (r.missing.length) parts.push(`${r.missing.length} 個找不到`);
+            if (r.errors.length) showToast(`已套用「${p.name}」，但有 ${r.errors.length} 個 MOD 失敗：${r.errors[0]}`, 'error');
+            else showToast(`已套用「${p.name}」：${parts.join('、')}（遊戲內按 F10 重新載入）`);
+            rescan();
+          }}
         />
       )}
 

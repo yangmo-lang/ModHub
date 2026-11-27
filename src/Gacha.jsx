@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 const api = window.modhub;
+const UIGF_GAMES = new Set(['SRMI', 'ZZMI']);
 const errText = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 const pad2 = (n) => String(n).padStart(2, '0');
 const fmtShort = (t) => {
@@ -126,8 +127,17 @@ export default function Gacha({ gameId, gameName, showToast }) {
         <button className="btn" onClick={() => setPasting(true)} disabled={busy}>貼上網址</button>
         <div className="spacer" />
         {progress && <span className="codex-src">{progress.stage}{progress.count != null ? ` · 已讀 ${progress.count} 筆` : ''}</span>}
-        <button className="btn" onClick={async () => { try { const v = await api.gachaImport(gameId); if (v) { showToast('已匯入'); loadAccounts(v.account.id); } } catch (e) { showToast(errText(e), 'error'); } }}>匯入</button>
-        {vis && <button className="btn" onClick={async () => { const p = await api.gachaExport(gameId, accountId); if (p) showToast(`已匯出到 ${p}`); }}>匯出</button>}
+        <button className="btn" title={UIGF_GAMES.has(gameId) ? '支援 ModHub JSON、UIGF v4 與 SRGF' : 'ModHub JSON'} onClick={async () => {
+          try {
+            const v = await api.gachaImport(gameId);
+            if (!v) return;
+            const im = v.imported;
+            showToast(im ? `已匯入 UIGF：${im.accounts} 個帳號、新增 ${im.added} 筆${im.skipped ? `（${im.skipped} 筆格式不符略過）` : ''}` : '已匯入');
+            loadAccounts(v.account.id);
+          } catch (e) { showToast(errText(e), 'error'); }
+        }}>匯入</button>
+        {vis && <button className="btn" onClick={async () => { try { const p = await api.gachaExport(gameId, accountId); if (p) showToast(`已匯出到 ${p}`); } catch (e) { showToast(errText(e), 'error'); } }}>匯出</button>}
+        {vis && UIGF_GAMES.has(gameId) && <button className="btn" title="UIGF v4.0 標準格式，可匯入其他支援 UIGF 的抽卡分析工具" onClick={async () => { try { const p = await api.gachaExport(gameId, accountId, 'uigf'); if (p) showToast(`已匯出 UIGF 到 ${p}`); } catch (e) { showToast(errText(e), 'error'); } }}>匯出 UIGF</button>}
         {HOYO(gameId) && <button className="btn" onClick={() => api.gachaOfficial(gameId)} title={`HoYoLAB 官方${T.page}`}>官方頁面</button>}
       </header>
 

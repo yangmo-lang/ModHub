@@ -53,6 +53,12 @@ export default function Blueprint({ showToast }) {
 
       <div className="blueprint-body">
         {error && <div className="warn-box">{error}</div>}
+        {data?.stale && data.error && (
+          <div className="warn-box">讀不到最新的藍圖（{data.error}），先顯示 {fmtFull(data.fetchedAt)} 的資料。最新內容請按「原網頁」查看。</div>
+        )}
+        {data?.source?.relocated && (
+          <div className="card-meta">一圖流的藍圖原始檔已搬到 <code>{data.source.file.replace(/^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\//, '')}</code>，ModHub 已自動改讀新位置。</div>
+        )}
         {!data && !error && <div className="empty">讀取藍圖中…</div>}
 
         {data && (

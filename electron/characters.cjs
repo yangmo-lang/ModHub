@@ -192,8 +192,8 @@ const ENDFIELD_EN = {
   阿列什: 'Alesh', 弧光: 'Arclight', 艾维文娜: 'Avywenna', 大潘: 'Da Pan', 昼雪: 'Snowshine', 狼卫: 'Wulfgard',
   安塔尔: 'Antal', 卡契尔: 'Catcher', 埃特拉: 'Estella', 萤石: 'Fluorite', 汤汤: 'Tangtang', 洛茜: 'Rossi',
   庄方宜: 'Zhuang Fangyi', 小刻: 'Kay', 管理员男: 'Endministrator', 管理员女: 'Endministrator',
-  // endfield.gg 官方英文名（2026-11-28 依 endfield.gg/operators 的職業 / 陣營與讀音核對；米米诺為前瞻，尚無英文名）
-  诀: 'Arcane', 明河: 'Argent Flow', 卡缪: 'Camille', 梨诺: 'Liino', 弭弗: 'Mi Fu', 祀: 'Si', 提弗洛斯: 'Typhoeus', 噗切娜: 'Purrchena',
+  // endfield.gg 官方英文名（2026-11-28 依 endfield.gg/operators 的職業 / 陣營與讀音核對；米米诺依使用者提供補上）
+  诀: 'Arcane', 明河: 'Argent Flow', 卡缪: 'Camille', 梨诺: 'Liino', 弭弗: 'Mi Fu', 祀: 'Si', 提弗洛斯: 'Typhoeus', 噗切娜: 'Purrchena', 米米诺: 'Mimino',
 };
 
 /**

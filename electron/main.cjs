@@ -34,6 +34,8 @@ const planner = require('./planner/index.cjs');
 const gacha = require('./gacha/index.cjs');
 const updater = require('./updater.cjs');
 const blueprint = require('./blueprint.cjs');
+const presets = require('./presets.cjs');
+const launcher = require('./launcher.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -197,6 +199,7 @@ app.whenReady().then(() => {
   // ---- 抽卡紀錄 ----
   gacha.register(ipcMain, {
     userData: () => app.getPath('userData'),
+    appVersion: () => app.getVersion(),
     xxmiRoot: () => settings.xxmiRoot,
     getCodex: (gameId) => codex.getCodex(app.getPath('userData'), gameId, { loadWiki: () => skland.loadWiki(), DETAIL: skland.DETAIL }),
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
@@ -214,18 +217,24 @@ app.whenReady().then(() => {
   handleNxm = onlineApi.handleNxm;
   for (const l of pendingNxm.splice(0)) handleNxm(l);
 
-  ipcMain.handle('mods:scan', (_e, gameId) => {
+  // 掃描選項：介面掃描與預設組合共用，兩邊對「哪些是分類、哪些是 MOD」的判斷才會一致
+  const scanOptions = (gameId) => {
     const game = gameById(gameId);
-    const modsDir = config.modsDirFor(settings, gameId);
-    if (!fs.existsSync(modsDir)) return { modsDir, missing: true, categories: [], mods: [] };
-    const knownCategories = config.loadKnownCategories(settings, game);
     const { c, matchCharacter, guessCharacter } = matcherFor(gameId);
-    const result = scanner.scanMods(modsDir, {
-      knownCategories,
+    return {
+      knownCategories: config.loadKnownCategories(settings, game),
       characters: c?.data.characters,
       matchCharacter: c ? matchCharacter : null,
       guessCharacter: c ? guessCharacter : null,
-    });
+    };
+  };
+
+  ipcMain.handle('mods:scan', (_e, gameId) => {
+    gameById(gameId);
+    const modsDir = config.modsDirFor(settings, gameId);
+    if (!fs.existsSync(modsDir)) return { modsDir, missing: true, categories: [], mods: [] };
+    const { c } = matcherFor(gameId);
+    const result = scanner.scanMods(modsDir, scanOptions(gameId));
     const manual = settings.manualMap?.[gameId] || {};
     for (const cat of result.categories) {
       cat.displayName = cat.character ? cat.character.nameTw : chars.toTw(cat.name);
@@ -300,6 +309,61 @@ app.whenReady().then(() => {
   ipcMain.handle('mods:setEnabled', (_e, gameId, modPath, enabled) => {
     const root = config.modsDirFor(settings, gameById(gameId).id);
     return scanner.setModEnabled(root, modPath, enabled);
+  });
+
+  // 透過 XXMI Launcher 啟動遊戲（opts.gui = 只開 XXMI 視窗）
+  ipcMain.handle('xxmi:launch', (_e, gameId, opts) => {
+    const r = launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) });
+    return { args: r.args };
+  });
+  ipcMain.handle('xxmi:available', () => fs.existsSync(launcher.launcherExe(settings.xxmiRoot)));
+
+  // ---------- 預設組合 ----------
+  const presetStore = () => presets.createStore(path.join(app.getPath('userData'), 'presets.json'));
+  const presetRoot = (gameId) => {
+    const root = config.modsDirFor(settings, gameById(gameId).id);
+    if (!fs.existsSync(root)) throw new Error(`找不到 Mods 資料夾：${root}`);
+    return root;
+  };
+  const presetSummary = (p) => ({ id: p.id, name: p.name, count: p.enabled.length, createdAt: p.createdAt, updatedAt: p.updatedAt, auto: Boolean(p.auto) });
+  const planSummary = (plan) => ({
+    toEnable: plan.toEnable.map((m) => m.key),
+    toDisable: plan.toDisable.map((m) => m.key),
+    missing: plan.missing,
+    unchanged: plan.unchanged,
+  });
+
+  ipcMain.handle('presets:list', (_e, gameId) => presetStore().list(gameById(gameId).id).map(presetSummary));
+  ipcMain.handle('presets:create', (_e, gameId, name) => {
+    const root = presetRoot(gameId);
+    return presetSummary(presetStore().create(gameId, name, presets.snapshot(root, scanOptions(gameId))));
+  });
+  // patch: { name } 改名；{ capture: true } 用目前狀態覆蓋
+  ipcMain.handle('presets:update', (_e, gameId, id, patch = {}) => {
+    gameById(gameId);
+    const p = {};
+    if (patch.name !== undefined) p.name = patch.name;
+    if (patch.capture) p.enabled = presets.snapshot(presetRoot(gameId), scanOptions(gameId));
+    return presetSummary(presetStore().update(gameId, id, p));
+  });
+  ipcMain.handle('presets:remove', (_e, gameId, id) => presetStore().remove(gameById(gameId).id, id));
+  ipcMain.handle('presets:preview', (_e, gameId, id) => {
+    const root = presetRoot(gameId);
+    const p = presetStore().get(gameId, id);
+    if (!p) throw new Error('找不到這個組合');
+    return planSummary(presets.planApply(root, p.enabled, scanOptions(gameId)));
+  });
+  ipcMain.handle('presets:apply', (_e, gameId, id) => {
+    const root = presetRoot(gameId);
+    const store = presetStore();
+    const p = store.get(gameId, id);
+    if (!p) throw new Error('找不到這個組合');
+    const opts = scanOptions(gameId);
+    const plan = presets.planApply(root, p.enabled, opts);
+    if (!plan.toEnable.length && !plan.toDisable.length) return { enabled: 0, disabled: 0, missing: plan.missing, errors: [] };
+    // 套用前先記下目前狀態，套錯了可以用「套用前的狀態」切回來
+    if (id !== presets.BACKUP_ID) store.backup(gameId, presets.snapshot(root, opts));
+    return presets.applyPlan(root, plan);
   });
 
   // 刪除 MOD：確認後移到資源回收筒（不做永久刪除）

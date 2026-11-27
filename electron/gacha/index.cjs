@@ -9,6 +9,7 @@ const hsr = require('./hsr.cjs');
 const login = require('./login.cjs');
 const visual = require('./visual.cjs');
 const lcx = require('./lcx.cjs');
+const uigf = require('./uigf.cjs');
 const { normalizeName, toTw } = require('../characters.cjs');
 
 const SUPPORTED = { SRMI: 'hsr', EFMI: 'endfield', ZZMI: 'zzz' };
@@ -279,19 +280,46 @@ function register(ipcMain, ctx) {
     return login.logout(provider);
   });
 
-  ipcMain.handle('gacha:export', async (_e, gameId, accountId) => {
+  // format: 'modhub'（預設，ModHub 自己的 JSON）| 'uigf'（UIGF v4.0，星鐵 / 絕區零）
+  ipcMain.handle('gacha:export', async (_e, gameId, accountId, format = 'modhub') => {
     const d = load(gameId, accountId);
     if (!d) throw new Error('沒有紀錄');
-    const r = await dialog.showSaveDialog({ defaultPath: `${gameId}-gacha-${accountId}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+    const asUigf = format === 'uigf';
+    if (asUigf && !uigf.GAMES[gameId]) throw new Error('UIGF 只支援星鐵與絕區零');
+    const r = await dialog.showSaveDialog({
+      defaultPath: asUigf ? `UIGF_${uigf.GAMES[gameId].key}_${accountId}.json` : `${gameId}-gacha-${accountId}.json`,
+      filters: [{ name: asUigf ? 'UIGF v4 JSON' : 'JSON', extensions: ['json'] }],
+    });
     if (r.canceled || !r.filePath) return null;
-    fs.writeFileSync(r.filePath, JSON.stringify({ app: 'ModHub', game: gameId, exportedAt: new Date().toISOString(), account: d.account, records: d.records }, null, 1));
+    const body = asUigf
+      ? uigf.toUIGF(gameId, [{ account: d.account, records: d.records }], ctx.appVersion?.() || '')
+      : { app: 'ModHub', game: gameId, exportedAt: new Date().toISOString(), account: d.account, records: d.records };
+    fs.writeFileSync(r.filePath, JSON.stringify(body, null, 1));
     return r.filePath;
   });
 
   ipcMain.handle('gacha:import', async (_e, gameId) => {
-    const r = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'ModHub 抽卡紀錄 JSON', extensions: ['json'] }] });
+    const r = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: uigf.GAMES[gameId] ? 'ModHub / UIGF / SRGF 抽卡紀錄 JSON' : 'ModHub 抽卡紀錄 JSON', extensions: ['json'] }] });
     if (r.canceled || !r.filePaths[0]) return null;
-    const j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
+    let j;
+    try { j = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8')); } catch { throw new Error('檔案不是有效的 JSON'); }
+    // UIGF v4 / SRGF：可能含多個 uid，各自合併到對應帳號
+    if (uigf.isUIGF(j)) {
+      const blocks = uigf.fromUIGF(gameId, j);
+      let last = null;
+      let added = 0;
+      let skipped = 0;
+      for (const b of blocks) {
+        const old = load(gameId, b.uid);
+        const before = old?.records?.length || 0;
+        const data = { ...old, account: { id: b.uid, uid: b.uid, ...old?.account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, b.records) };
+        save(gameId, data);
+        added += data.records.length - before;
+        skipped += b.skipped;
+        last = data;
+      }
+      return { ...view(gameId, last), imported: { format: 'UIGF', accounts: blocks.length, added, skipped } };
+    }
     // 離愁軒摘要（各池卡片：{ limited, weapon, standard, newbie, joint }）→ 補到最近的終末地帳號
     if (gameId === 'EFMI' && !j.app && (Array.isArray(j.limited) || Array.isArray(j.weapon))) {
       const acc = accounts('EFMI')[0];

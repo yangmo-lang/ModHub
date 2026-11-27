@@ -22,6 +22,17 @@ contextBridge.exposeInMainWorld('modhub', {
   moveToCategory: (gameId, modPath, target) => ipcRenderer.invoke('mods:moveToCategory', gameId, modPath, target),
   onCharProgress: on('chars:progress'),
 
+  xxmiLaunch: (gameId, opts) => ipcRenderer.invoke('xxmi:launch', gameId, opts),
+  xxmiAvailable: () => ipcRenderer.invoke('xxmi:available'),
+
+  // 預設組合
+  presetList: (gameId) => ipcRenderer.invoke('presets:list', gameId),
+  presetCreate: (gameId, name) => ipcRenderer.invoke('presets:create', gameId, name),
+  presetUpdate: (gameId, id, patch) => ipcRenderer.invoke('presets:update', gameId, id, patch),
+  presetRemove: (gameId, id) => ipcRenderer.invoke('presets:remove', gameId, id),
+  presetPreview: (gameId, id) => ipcRenderer.invoke('presets:preview', gameId, id),
+  presetApply: (gameId, id) => ipcRenderer.invoke('presets:apply', gameId, id),
+
   // 圖鑑 / 前瞻
   codexGet: (gameId, force) => ipcRenderer.invoke('codex:get', gameId, force),
   codexDetail: (gameId, kind, id) => ipcRenderer.invoke('codex:detail', gameId, kind, id),
@@ -42,7 +53,7 @@ contextBridge.exposeInMainWorld('modhub', {
   gachaAccounts: (gameId) => ipcRenderer.invoke('gacha:accounts', gameId),
   gachaGet: (gameId, accountId) => ipcRenderer.invoke('gacha:get', gameId, accountId),
   gachaUpdate: (gameId, opts) => ipcRenderer.invoke('gacha:update', gameId, opts),
-  gachaExport: (gameId, accountId) => ipcRenderer.invoke('gacha:export', gameId, accountId),
+  gachaExport: (gameId, accountId, format) => ipcRenderer.invoke('gacha:export', gameId, accountId, format),
   gachaImport: (gameId) => ipcRenderer.invoke('gacha:import', gameId),
   gachaOfficial: (gameId) => ipcRenderer.invoke('gacha:official', gameId),
   onGachaProgress: on('gacha:progress'),

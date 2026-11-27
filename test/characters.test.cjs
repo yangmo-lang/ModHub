@@ -86,6 +86,7 @@ test('終末地 wiki 目錄轉換', () => {
   const xk = list.find((c) => c.id === '2922');
   assert.deepEqual([xk.meta.rarity, xk.meta.element, xk.meta.role, xk.meta.weapon, xk.meta.preview], [6, '自然', '先鋒', '長柄武器', false]);
   assert.equal(list.find((c) => c.id === '2923').meta.preview, true);
+  assert.equal(list.find((c) => c.id === '2923').en, 'Mimino');
   assert.equal(list.find((c) => c.id === '100').name, '男主');
   assert.ok(list.find((c) => c.id === '2923').meta.order > xk.meta.order, 'wiki 前面的比較新');
 });
