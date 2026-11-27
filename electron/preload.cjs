@@ -1,0 +1,45 @@
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
+
+const on = (channel) => (cb) => {
+  const h = (_e, p) => cb(p);
+  ipcRenderer.on(channel, h);
+  return () => ipcRenderer.removeListener(channel, h);
+};
+
+contextBridge.exposeInMainWorld('modhub', {
+  getState: () => ipcRenderer.invoke('state:get'),
+  saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
+  pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
+  scan: (gameId) => ipcRenderer.invoke('mods:scan', gameId),
+  setEnabled: (gameId, modPath, enabled) => ipcRenderer.invoke('mods:setEnabled', gameId, modPath, enabled),
+  enableOnly: (gameId, modPath) => ipcRenderer.invoke('mods:enableOnly', gameId, modPath),
+  openPath: (gameId, p) => ipcRenderer.invoke('shell:open', gameId, p),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  syncCharacters: (gameId) => ipcRenderer.invoke('chars:sync', gameId),
+  createCategory: (gameId, charId) => ipcRenderer.invoke('chars:createCategory', gameId, charId),
+  fillCovers: (gameId) => ipcRenderer.invoke('chars:fillCovers', gameId),
+  setMapping: (gameId, folderName, charId) => ipcRenderer.invoke('chars:setMapping', gameId, folderName, charId),
+  moveToCategory: (gameId, modPath, target) => ipcRenderer.invoke('mods:moveToCategory', gameId, modPath, target),
+  onCharProgress: on('chars:progress'),
+
+  // 線上
+  onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),
+  onlineDetails: (gameId, source, modId) => ipcRenderer.invoke('online:details', gameId, source, modId),
+  onlineDownload: (gameId, source, modId, fileId) => ipcRenderer.invoke('online:download', gameId, source, modId, fileId),
+  pickArchives: (gameId) => ipcRenderer.invoke('local:pick', gameId),
+  installFromPaths: (gameId, paths) => ipcRenderer.invoke('local:fromPaths', gameId, paths),
+  pathForFile: (file) => webUtils.getPathForFile(file),
+  listJobs: () => ipcRenderer.invoke('jobs:list'),
+  installJob: (id, opts) => ipcRenderer.invoke('jobs:install', id, opts),
+  cancelJob: (id) => ipcRenderer.invoke('jobs:cancel', id),
+  onJobUpdate: on('jobs:update'),
+  onJobRemoved: on('jobs:removed'),
+  onJobFocus: on('jobs:focus'),
+
+  // Nexus
+  nexusStatus: () => ipcRenderer.invoke('nexus:status'),
+  nexusSetKey: (key) => ipcRenderer.invoke('nexus:setKey', key),
+  nexusClearKey: () => ipcRenderer.invoke('nexus:clearKey'),
+  nxmRegister: () => ipcRenderer.invoke('nxm:register'),
+  nxmUnregister: () => ipcRenderer.invoke('nxm:unregister'),
+});
