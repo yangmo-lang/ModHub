@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('modhub', {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   scan: (gameId) => ipcRenderer.invoke('mods:scan', gameId),
   setEnabled: (gameId, modPath, enabled) => ipcRenderer.invoke('mods:setEnabled', gameId, modPath, enabled),
-  enableOnly: (gameId, modPath) => ipcRenderer.invoke('mods:enableOnly', gameId, modPath),
+  trashMod: (gameId, modPath) => ipcRenderer.invoke('mods:trash', gameId, modPath),
   openPath: (gameId, p) => ipcRenderer.invoke('shell:open', gameId, p),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   syncCharacters: (gameId) => ipcRenderer.invoke('chars:sync', gameId),

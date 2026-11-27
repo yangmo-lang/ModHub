@@ -240,7 +240,12 @@ export default function App() {
   };
 
   const toggle = (m) => act(() => api.setEnabled(gameId, m.path, !m.enabled), `${m.enabled ? '已停用' : '已啟用'}：${m.name}（遊戲內按 F10 重新載入）`);
-  const only = (m) => act(() => api.enableOnly(gameId, m.path), `「${m.categoryTw}」只啟用：${m.name}`);
+  // 刪除 = 移到資源回收筒（主程序會先跳確認視窗）；按取消就不顯示訊息
+  const trash = async (m) => {
+    let ok = false;
+    await act(async () => { ok = await api.trashMod(gameId, m.path); });
+    if (ok) showToast(`已將「${m.name}」移到資源回收筒`);
+  };
   const createCat = (c) => act(() => api.createCategory(gameId, c.id), `已建立角色資料夾：${c.nameTw}`);
   const fillCovers = () => act(async () => {
     const n = await api.fillCovers(gameId);
@@ -449,9 +454,9 @@ export default function App() {
                       <input type="checkbox" checked={m.enabled} onChange={() => toggle(m)} disabled={busy} />
                       <span />
                     </label>
-                    {m.category !== UNCAT && <button className="link" onClick={() => only(m)} disabled={busy} title="停用同分類其他 MOD">只用這個</button>}
                     <button className="link" onClick={() => setPicker({ mode: 'move', mod: m })} disabled={busy} title="移到其他角色或分類資料夾">{m.category !== UNCAT ? '移動…' : '移入…'}</button>
                     <button className="link" onClick={() => api.openPath(gameId, m.path)} title="在檔案總管開啟">開啟</button>
+                    <button className="link danger" onClick={() => trash(m)} disabled={busy} title="移到資源回收筒（可從資源回收筒還原）">刪除</button>
                   </div>
                 </div>
               </article>

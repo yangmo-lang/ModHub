@@ -292,9 +292,27 @@ app.whenReady().then(() => {
     return scanner.setModEnabled(root, modPath, enabled);
   });
 
-  ipcMain.handle('mods:enableOnly', (_e, gameId, modPath) => {
+  // 刪除 MOD：確認後移到資源回收筒（不做永久刪除）
+  ipcMain.handle('mods:trash', async (e, gameId, modPath) => {
     const root = config.modsDirFor(settings, gameById(gameId).id);
-    return scanner.enableOnly(root, modPath);
+    scanner.assertInside(root, modPath);
+    if (!fs.statSync(modPath).isDirectory()) throw new Error('這不是 MOD 資料夾');
+    const name = path.basename(modPath).replace(/^DISABLED_/i, '');
+    const r = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), {
+      type: 'warning',
+      title: '刪除 MOD',
+      message: `要刪除「${name}」嗎？`,
+      detail: `資料夾會移到資源回收筒，需要時可以從資源回收筒還原。
+
+${modPath}`,
+      buttons: ['移到資源回收筒', '取消'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (r.response !== 0) return false;
+    await shell.trashItem(modPath);
+    return true;
   });
 
   ipcMain.handle('shell:open', (_e, gameId, p) => {
