@@ -352,6 +352,84 @@ function buildZzzFromRecords(records, icons) {
   };
 }
 
+// ---------------- 崩壞：星穹鐵道 ----------------
+const HSR_POOLS = [
+  { key: 'hsr:11', label: '角色活動躍遷', pityMax: 90, limited: true },
+  { key: 'hsr:12', label: '光錐活動躍遷', pityMax: 80, limited: true },
+  { key: 'hsr:21', label: '聯動角色躍遷', pityMax: 90, limited: true },
+  { key: 'hsr:22', label: '聯動光錐躍遷', pityMax: 80, limited: true },
+  { key: 'hsr:1', label: '群星躍遷', pityMax: 90 },
+  { key: 'hsr:2', label: '始發躍遷', pityMax: 50 },
+];
+// 常駐 5★（拿來判斷「歪」）：群星躍遷出過的 + 已知常駐角色 / 光錐
+const HSR_STANDARD_5 = ['姬子', '瓦爾特', '布洛妮婭', '傑帕德', '克拉拉', '彥卿', '白露',
+  '銀河鐵道之夜', '以世界之名', '但戰鬥還未結束', '制勝的瞬間', '如泥酣眠', '時節不居', '無可取代的東西'].map((n) => toTw(n));
+
+/**
+ * 星鐵的逐抽紀錄每筆都有 gacha_id（卡池 id），所以限定池直接依 gacha_id 分期；
+ * 同一類型的卡池共用保底（跨期累計），期末沒出的抽數 =「已墊」。卡池名稱 = 該期出過的 UP。
+ */
+function hsrBanners(pool, list, roster, icons) {
+  const byId = new Map();
+  for (const r of list) {
+    const k = pool.limited ? r.bannerId || 'unknown' : pool.key;
+    if (!byId.has(k)) byId.set(k, []);
+    byId.get(k).push(r);
+  }
+  let pity = 0;
+  const banners = [...byId.entries()]
+    .sort((a, b) => a[1][0].time - b[1][0].time)
+    .map(([gid, recs]) => {
+      const entries = [];
+      recs.forEach((r, i) => {
+        pity++;
+        if (r.tier === 'top') {
+          entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: pool.limited ? !roster.has(r.name) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
+          pity = 0;
+        }
+      });
+      const ups = [...new Set(entries.filter((e) => e.isUp).map((e) => e.name))];
+      const rev = entries.reverse();
+      return {
+        id: `${pool.key}|${gid}`,
+        bannerId: pool.limited ? gid : null,
+        name: pool.limited && ups.length ? ups.join('、') : pool.limited ? `${pool.label}（${fmtMd(recs[0].time)}）` : pool.label,
+        current: false,
+        pulls: recs.length,
+        free: 0,
+        start: recs[0].time,
+        end: recs[recs.length - 1].time,
+        upName: ups[0] || null,
+        upIcon: iconOf(icons, ups[0]),
+        upList: ups.map((n) => ({ name: n, icon: iconOf(icons, n) })),
+        entries: rev,
+        tops: summarizeTops(rev),
+        pad: pity,
+      };
+    });
+  const lastB = banners[banners.length - 1];
+  if (lastB && pool.limited && Date.now() - lastB.end < PHASE_SPAN) lastB.current = true;
+  return banners.reverse();
+}
+
+function buildHsr(records, icons = {}) {
+  const roster = new Set([...HSR_STANDARD_5, ...records.filter((r) => r.pool === 'hsr:1' && r.tier === 'top').map((r) => r.name)]);
+  const groups = [];
+  HSR_POOLS.forEach((pool, order) => {
+    const list = records.filter((r) => r.pool === pool.key);
+    if (!list.length) return;
+    let pity = 0;
+    for (const r of list) pity = r.tier === 'top' ? 0 : pity + 1;
+    groups.push({ key: pool.key, label: pool.label, order, pool: pool.key, pityNow: pity, pityMax: pool.pityMax, pulls: list.length, free: 0, banners: hsrBanners(pool, list, roster, icons) });
+  });
+  const tops = records.filter((r) => r.tier === 'top');
+  const lim = tops.filter((r) => HSR_POOLS.find((p) => p.key === r.pool)?.limited);
+  return {
+    totals: { pulls: records.length, free: 0, tops: tops.length, topRate: records.length ? tops.length / records.length : 0, upWin: lim.length ? lim.filter((r) => !roster.has(r.name)).length / lim.length : null, upKnown: lim.length, topLabel: '5★', source: 'records' },
+    groups,
+  };
+}
+
 /** 逐抽格子：T 編號、名稱、圖示、稀有度、計數（最高稀有度=保底抽數，其他=距上次同稀有度） */
 function pullGrid(records, icons = {}, { pool, bannerId, isWeaponGroup } = {}) {
   const list = records.filter((r) => !r.gift && (isWeaponGroup ? r.pool.startsWith('weapon:') && (!bannerId || r.bannerId === bannerId) : r.pool === pool));
@@ -369,4 +447,4 @@ function pullGrid(records, icons = {}, { pool, bannerId, isWeaponGroup } = {}) {
   return filtered.reverse();
 }
 
-module.exports = { mergeHistory, buildEndfield, buildZzz, buildZzzFromRecords, pullGrid, ZZZ_TYPES };
+module.exports = { mergeHistory, buildEndfield, buildZzz, buildZzzFromRecords, buildHsr, pullGrid, ZZZ_TYPES, HSR_STANDARD_5 };

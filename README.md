@@ -73,7 +73,7 @@ npm test         # 掃描/切換邏輯單元測試
   - 絕區零：HoYoLAB 戰績 `game_record_zzz`（`avatar/basic`、`avatar/info`）→ 等級、技能（含核心技）、裝備音擎等級；國際服沒有背包資料
   - 突破階段依等級推算最低值（官方沒提供）；同步只更新「目前」，原本的目標保留（低於目前時拉高）
 
-### 抽卡紀錄（終末地 / 絕區零）
+### 抽卡紀錄（星鐵 / 終末地 / 絕區零）
 
 - 「抽卡紀錄」分頁：在遊戲內開啟紀錄頁面後按「↻ 從遊戲更新」，或「貼上網址」
   - 終末地：讀 `%USERPROFILE%\AppData\LocalLow\{Gryphline|Hypergryph}\Endfield\sdklogs\HGWebview.log` 裡最新的
@@ -81,12 +81,18 @@ npm test         # 掃描/切換邏輯單元測試
     - 新版遊戲已不再把含 token 的網址寫進日誌；日誌沒有連結或連結過期時，若已登入鷹角帳號會自動改用帳號更新
   - 絕區零：讀遊戲 `ZenlessZoneZero_Data\webCaches\<版本>\Cache\Cache_Data\data_2` 裡 `auth_appid=webview_gacha` 的 authkey，
     呼叫官方 `getGachaLog`；另有按鈕開啟 HoYoLAB 官方調頻紀錄頁
+  - 星鐵：讀 `StarRail_Data\webCaches\<版本>\Cache\Cache_Data\data_2` 裡的躍遷紀錄 authkey（與 starrailstation.com 匯入說明相同的來源；
+    遊戲資料夾來自 XXMI 設定或 `LocalLow\Cognosphere\Star Rail\Player.log`），
+    呼叫 `public-operation-hkrpg-sg.hoyoverse.com` 的 `getGachaLog`（角色 / 光錐活動、群星、始發）與 `getLdGachaLog`（聯動角色 / 光錐，gacha_type 21 / 22）
 - token / authkey 只在記憶體中使用，不寫入檔案；連結有效時間很短，開完紀錄頁要馬上更新
 - **官方帳號登入（不用開遊戲）**：「官方帳號」列按「登入」會開啟官方登入頁（帳密只輸入在官方網頁上）
   - 終末地：鷹角通行證（國際服 user.gryphline.com / 國服 user.hypergryph.com）→ `cookie_store/account_token`
     → `as.*/user/oauth2/v2/grant` → `binding_list`（找出所有終末地角色）→ `u8_token_by_uid` → 紀錄 API
   - 絕區零：HoYoLAB 登入 → `getUserGameRolesByCookieToken` → `genAuthKeyByCookieToken`（auth_appid=webview_gacha）→ `getGachaLog`
     （與 HoYoLAB 官方調頻查詢工具相同的取得 authkey 方式）
+  - 星鐵：同一個 HoYoLAB 登入，`game_biz=hkrpg_global` 產生 authkey → `getGachaLog`；另抓 HoYoLAB 官方躍遷紀錄工具
+    （act.hoyolab.com/sr/event/gt-aio/gacha-records）的 `sg-act-public-api.hoyolab.com/event/rpg_gacha_record/{index,brief,pool_stat}`，
+    回應格式沒有文件，目前原樣存在紀錄檔的 `official`，總覽仍以逐抽紀錄計算
   - 登入狀態留在獨立、持久的瀏覽器分區（`persist:modhub-*`，Chromium 加密保存），ModHub 檔案不存密碼或 token；「登出」會清除該分區
 - 紀錄存在 `%APPDATA%\modhub\gacha\<遊戲>\<帳號>.json`，之後只下載新紀錄；可匯出 / 匯入 JSON
 - 統計：各池總抽數、距上次最高稀有度、限定池本期大保底（終末地 120 / 武器 80）、各稀有度數量、平均出貨抽數、出貨歷史
@@ -97,6 +103,8 @@ npm test         # 掃描/切換邏輯單元測試
   - 絕區零：登入 HoYoLAB 時另抓官方調頻查詢工具的統計（`/api/zzz/index`、`hist_pool_stat`、`cur_pool_stat`），
     含全部版本、官方 is_up 與圖示；逐抽紀錄 API 只保留約 6 個月
   - 「從遊戲更新」時若 HoYoLAB 已登入同一個 uid，也會一併更新官方統計
+  - 星鐵：逐抽紀錄有 `gacha_id`，限定池直接依卡池 id 分期，卡池名稱 = 該期出的 UP；常駐 5★（姬子、瓦爾特、布洛妮婭、傑帕德、
+    克拉拉、彥卿、白露與 7 把常駐光錐，加上群星躍遷出過的）判定為歪；保底跨期累計
   - 沒有官方統計時，限定池依抽卡時間分期（6 天沒抽或超過 21 天算下一期），卡池名稱 = 該期出的 UP；保底跨期累計
 - 登入 cookie 在登入後、呼叫官方 API 後與關閉程式前立即寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
 - 尚未支援：UIGF 標準格式匯入匯出

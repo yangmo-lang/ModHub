@@ -5,12 +5,19 @@ const { dialog, shell } = require('electron');
 const stats = require('./stats.cjs');
 const ef = require('./endfield.cjs');
 const zzz = require('./zzz.cjs');
+const hsr = require('./hsr.cjs');
 const login = require('./login.cjs');
 const visual = require('./visual.cjs');
 const lcx = require('./lcx.cjs');
 const { normalizeName, toTw } = require('../characters.cjs');
 
-const SUPPORTED = { EFMI: 'endfield', ZZMI: 'zzz' };
+const SUPPORTED = { SRMI: 'hsr', EFMI: 'endfield', ZZMI: 'zzz' };
+
+// HoYoverse 遊戲（同一套 authkey / getGachaLog / HoYoLAB 登入）
+const HOYO = {
+  ZZMI: { mod: zzz, game: '絕區零', biz: 'nap_global', host: 'public-operation-nap-sg.hoyoverse.com', official: (r) => login.hoyoOfficial(r), open: '遊戲內開啟「調頻紀錄」頁面', label: '調頻紀錄' },
+  SRMI: { mod: hsr, game: '星穹鐵道', biz: 'hkrpg_global', host: 'public-operation-hkrpg-sg.hoyoverse.com', official: (r) => login.hoyoOfficialHsr(r), open: '遊戲內開啟「躍遷 → 查看詳情 → 紀錄」頁面', label: '躍遷紀錄' },
+};
 
 function register(ipcMain, ctx) {
   // ctx: { userData(), xxmiRoot(), emit(channel, payload) }
@@ -23,7 +30,7 @@ function register(ipcMain, ctx) {
     fs.writeFileSync(f + '.tmp', JSON.stringify(data));
     fs.renameSync(f + '.tmp', f);
   };
-  const rulesOf = (gameId, records) => (gameId === 'EFMI' ? ef.rulesFor(records) : zzz.rulesFor());
+  const rulesOf = (gameId, records) => (gameId === 'EFMI' ? ef.rulesFor(records) : HOYO[gameId].mod.rulesFor());
 
   function accounts(gameId) {
     if (!fs.existsSync(dir(gameId))) return [];
@@ -79,12 +86,12 @@ function register(ipcMain, ctx) {
     return { data, added: records.length };
   }
 
-  async function pullZzz(auth, account, progress) {
-    const old = load('ZZMI', account.id);
+  async function pullHoyo(gameId, auth, account, progress) {
+    const old = load(gameId, account.id);
     const known = new Set((old?.records || []).map((r) => r.id));
-    const { records } = await zzz.fetchRecords(auth, known, progress);
+    const { records } = await HOYO[gameId].mod.fetchRecords(auth, known, progress);
     const data = { ...old, account: { ...old?.account, ...account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, records) };
-    save('ZZMI', data);
+    save(gameId, data);
     return { data, added: records.length };
   }
 
@@ -104,21 +111,22 @@ function register(ipcMain, ctx) {
         }
       }
       if (!results.length) throw new Error('沒有已登入的鷹角帳號，或帳號底下沒有終末地角色');
-    } else if (gameId === 'ZZMI') {
-      const roles = await login.hoyoRoles();
+    } else if (HOYO[gameId]) {
+      const H = HOYO[gameId];
+      const roles = await login.hoyoRoles(H.biz);
       if (!roles) throw new Error('HoYoLAB 尚未登入或登入已過期，請重新登入');
-      if (!roles.length) throw new Error('這個 HoYoLAB 帳號沒有絕區零角色');
+      if (!roles.length) throw new Error(`這個 HoYoLAB 帳號沒有${H.game}角色`);
       for (const role of roles) {
-        progress({ stage: `${role.name || role.uid}：產生調頻紀錄憑證` });
+        progress({ stage: `${role.name || role.uid}：產生${H.label}憑證` });
         const key = await login.hoyoAuthKey(role);
-        const auth = { ...key, game_biz: 'nap_global', region: role.region, lang: 'zh-tw', host: 'public-operation-nap-sg.hoyoverse.com' };
-        const account = { id: role.uid, uid: role.uid, name: role.name, server: role.server, via: 'account' };
-        const res = await pullZzz(auth, account, (p) => progress({ ...p, stage: `${role.name}｜${p.stage}` }));
+        const auth = { ...key, game_biz: H.biz, region: role.region, lang: 'zh-tw', host: H.host };
+        const account = { id: role.uid, uid: role.uid, name: role.name, server: role.server, region: role.region, via: 'account' };
+        const res = await pullHoyo(gameId, auth, account, (p) => progress({ ...p, stage: `${role.name}｜${p.stage}` }));
         // HoYoLAB 官方統計：全部版本的出貨紀錄、UP 判定、目前卡池
         progress({ stage: `${role.name}｜讀取官方統計` });
         try {
-          res.data.official = await login.hoyoOfficial(role);
-          save('ZZMI', res.data);
+          res.data.official = await H.official(role);
+          save(gameId, res.data);
         } catch (e) {
           progress({ stage: `官方統計讀取失敗：${e.message}` });
         }
@@ -164,30 +172,31 @@ function register(ipcMain, ctx) {
         throw e;
       }
     }
-    if (gameId === 'ZZMI') {
+    if (HOYO[gameId]) {
+      const H = HOYO[gameId];
       let auth;
       if (opts.url) {
-        auth = zzz.parseAuthUrl(opts.url);
-        if (!auth) throw new Error('這不是絕區零的調頻紀錄網址（需要含 authkey）');
+        auth = H.mod.parseAuthUrl(opts.url);
+        if (!auth) throw new Error(`這不是${H.game}的${H.label}網址（需要含 authkey）`);
       } else {
-        const cands = zzz.findFromCache(zzz.findGameDataDirs(ctx.xxmiRoot()));
-        if (!cands.length) throw new Error('找不到調頻紀錄連結：請先在遊戲內開啟「調頻紀錄」頁面，或改用「登入 HoYoLAB」');
+        const cands = H.mod.findFromCache(H.mod.findGameDataDirs(ctx.xxmiRoot()));
+        if (!cands.length) throw new Error(`找不到${H.label}連結：請先在${H.open}，或改用「登入 HoYoLAB」`);
         progress({ stage: '確認連結' });
-        auth = await zzz.pickValid(cands);
+        auth = await H.mod.pickValid(cands);
       }
       // 先查 uid，才知道要合併到哪個帳號、哪些紀錄已經有了
       progress({ stage: '確認帳號' });
-      const uid = (await zzz.probeUid(auth)) || 'unknown';
-      const old = load('ZZMI', uid);
-      const { data, added } = await pullZzz(auth, { id: uid, uid, server: old?.account?.server || auth.region || auth.game_biz }, progress);
+      const uid = (await H.mod.probeUid(auth)) || 'unknown';
+      const old = load(gameId, uid);
+      const { data, added } = await pullHoyo(gameId, auth, { id: uid, uid, server: old?.account?.server || auth.region || auth.game_biz }, progress);
       // 有登入 HoYoLAB 且是同一個 uid：順便更新官方統計（每期卡池、UP 判定、全部版本）
-      const role = (await login.hoyoRoles().catch(() => null))?.find((r) => r.uid === uid);
+      const role = (await login.hoyoRoles(H.biz).catch(() => null))?.find((r) => r.uid === uid);
       if (role) {
         progress({ stage: '讀取 HoYoLAB 官方統計' });
         try {
-          data.official = await login.hoyoOfficial(role);
+          data.official = await H.official(role);
           data.account = { ...data.account, name: data.account.name || role.name };
-          save('ZZMI', data);
+          save(gameId, data);
         } catch (e) {
           progress({ stage: `官方統計讀取失敗：${e.message}` });
         }
@@ -227,7 +236,8 @@ function register(ipcMain, ctx) {
     }
     const v = gameId === 'EFMI'
       ? visual.mergeHistory(visual.buildEndfield(d.records, loadPools(), icons), d.history, d.records, icons)
-      : visual.buildZzz(d.records, d.official, icons);
+      : gameId === 'SRMI' ? visual.buildHsr(d.records, icons)
+        : visual.buildZzz(d.records, d.official, icons);
     return {
       account: d.account,
       updatedAt: d.updatedAt,
@@ -249,7 +259,7 @@ function register(ipcMain, ctx) {
   ipcMain.handle('gacha:records', (_e, gameId, accountId) => load(gameId, accountId)?.records || []);
 
   // ---- 官方帳號登入 ----
-  const providersOf = (gameId) => (gameId === 'EFMI' ? ['gryphline', 'hypergryph'] : gameId === 'ZZMI' ? ['hoyolab'] : []);
+  const providersOf = (gameId) => (gameId === 'EFMI' ? ['gryphline', 'hypergryph'] : HOYO[gameId] ? ['hoyolab'] : []);
   ipcMain.handle('gacha:loginStatus', async (_e, gameId) => Promise.all(providersOf(gameId).map(async (p) => ({ provider: p, label: login.PROVIDERS[p].label, ...(await login.status(p)) }))));
   ipcMain.handle('gacha:login', async (e, gameId, provider) => {
     if (!providersOf(gameId).includes(provider)) throw new Error('不支援的帳號類型');
@@ -292,7 +302,7 @@ function register(ipcMain, ctx) {
   });
 
   ipcMain.handle('gacha:official', (_e, gameId) => {
-    if (gameId === 'ZZMI') return shell.openExternal(zzz.OFFICIAL_PAGE);
+    if (HOYO[gameId]) return shell.openExternal(HOYO[gameId].mod.OFFICIAL_PAGE);
     return null;
   });
 }

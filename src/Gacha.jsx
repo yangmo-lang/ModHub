@@ -14,9 +14,11 @@ const fmtDay = (t) => {
   return `${String(d.getFullYear()).slice(2)}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`;
 };
 const fmtFull = (t) => (t ? new Date(t).toLocaleString() : '');
+const HOYO = (g) => g === 'ZZMI' || g === 'SRMI';
 const pct = (x) => (x == null ? '—' : `${(x * 100).toFixed(2)}%`);
 
 const GAME_TEXT = {
+  SRMI: { page: '躍遷紀錄', where: '遊戲內「躍遷」→「查看詳情」→「紀錄」', top: '5★', mid: '4★', low: '3★', token: 'authkey', freeText: '免費', bigText: 'UP' },
   EFMI: { page: '尋訪紀錄', where: '遊戲內「尋訪」頁面 →「尋訪紀錄」', top: '6★', mid: '5★', low: '4★', token: 'u8_token', freeText: '加急尋訪', bigText: '當期信物' },
   ZZMI: { page: '調頻紀錄', where: '遊戲內「調頻」→「調頻紀錄」', top: 'S', mid: 'A', low: 'B', token: 'authkey', freeText: '免費', bigText: 'UP' },
 };
@@ -126,7 +128,7 @@ export default function Gacha({ gameId, gameName, showToast }) {
         {progress && <span className="codex-src">{progress.stage}{progress.count != null ? ` · 已讀 ${progress.count} 筆` : ''}</span>}
         <button className="btn" onClick={async () => { try { const v = await api.gachaImport(gameId); if (v) { showToast('已匯入'); loadAccounts(v.account.id); } } catch (e) { showToast(errText(e), 'error'); } }}>匯入</button>
         {vis && <button className="btn" onClick={async () => { const p = await api.gachaExport(gameId, accountId); if (p) showToast(`已匯出到 ${p}`); }}>匯出</button>}
-        {gameId === 'ZZMI' && <button className="btn" onClick={() => api.gachaOfficial(gameId)} title="HoYoLAB 官方調頻紀錄">官方頁面</button>}
+        {HOYO(gameId) && <button className="btn" onClick={() => api.gachaOfficial(gameId)} title={`HoYoLAB 官方${T.page}`}>官方頁面</button>}
       </header>
 
       <div className="account-bar">
@@ -183,8 +185,8 @@ export default function Gacha({ gameId, gameName, showToast }) {
 
             {group && <GroupView group={group} T={T} onOpen={(banner) => setDetail({ group, banner })} />}
 
-            {vis.totals.source === 'records' && gameId === 'ZZMI' && (
-              <p className="card-meta center">提示：登入 HoYoLAB 後按「用帳號更新」，可取得官方統計（全部版本、UP 判定與每期卡池）。逐抽紀錄 API 只保留約 6 個月。</p>
+            {vis.totals.source === 'records' && HOYO(gameId) && (
+              <p className="card-meta center">提示：登入 HoYoLAB 後按「用帳號更新」，{gameId === 'ZZMI' ? '可取得官方統計（全部版本、UP 判定與每期卡池）。' : '會一併下載 HoYoLAB 官方躍遷統計（目前只保存，總覽仍以逐抽紀錄計算）。'}逐抽紀錄 API 只保留約 6 個月，請定期更新。</p>
             )}
           </>
         )}
@@ -316,7 +318,8 @@ function BannerDetail({ gameId, accountId, vis, group, banner, T, onBack }) {
     if (banner.history) { setGrid([]); return () => {}; }
     const opts = gameId === 'EFMI'
       ? (group.key === 'weapon' ? { isWeaponGroup: true, bannerId: banner.id } : { pool: group.key, bannerId: banner.id })
-      : { pool: group.pool || group.key };
+      : gameId === 'SRMI' ? { pool: group.key, bannerId: banner.bannerId || undefined }
+        : { pool: group.pool || group.key };
     api.gachaGrid(gameId, accountId, opts).then((g) => {
       if (!alive) return;
       // 絕區零：官方卡池沒有 id 對應，依時間區間篩選（有時間的話）
@@ -367,7 +370,7 @@ function BannerDetail({ gameId, accountId, vis, group, banner, T, onBack }) {
         <div className="seg small">
           {[['', '全部'], ['top', T.top], ['mid', T.mid], ['low', T.low]].map(([k, l]) => <button key={k} className={tier === k ? 'active' : ''} onClick={() => setTier(k)}>{l}</button>)}
         </div>
-        {gameId === 'ZZMI' && <span className="card-meta">（官方逐抽紀錄只保留約 6 個月）</span>}
+        {HOYO(gameId) && <span className="card-meta">（官方逐抽紀錄只保留約 6 個月）</span>}
       </div>
       {grid && !shown.length && <div className="g-empty">{banner.history ? `這期來自${banner.history}，只有出貨摘要，沒有逐抽紀錄` : "沒有可顯示的逐抽紀錄"}</div>}
       <div className="g-grid">
