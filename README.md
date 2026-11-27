@@ -90,9 +90,9 @@ npm test         # 掃描/切換邏輯單元測試
     → `as.*/user/oauth2/v2/grant` → `binding_list`（找出所有終末地角色）→ `u8_token_by_uid` → 紀錄 API
   - 絕區零：HoYoLAB 登入 → `getUserGameRolesByCookieToken` → `genAuthKeyByCookieToken`（auth_appid=webview_gacha）→ `getGachaLog`
     （與 HoYoLAB 官方調頻查詢工具相同的取得 authkey 方式）
-  - 星鐵：同一個 HoYoLAB 登入，`game_biz=hkrpg_global` 產生 authkey → `getGachaLog`；另抓 HoYoLAB 官方躍遷紀錄工具
-    （act.hoyolab.com/sr/event/gt-aio/gacha-records）的 `sg-act-public-api.hoyolab.com/event/rpg_gacha_record/{index,brief,pool_stat}`，
-    回應格式沒有文件，目前原樣存在紀錄檔的 `official`，總覽仍以逐抽紀錄計算
+  - 星鐵**不支援**帳號更新：HoYoLAB 登入產生的 `hkrpg_global` authkey 會被 `getGachaLog` 拒絕（-100 authkey error），
+    HoYoLAB 官方躍遷紀錄工具（`sg-act-public-api.hoyolab.com/event/rpg_gacha_record`）也回「請從遊戲內打開」（2026-11 實測）。
+    星鐵只能「從遊戲更新」或「貼上網址」；HoYoLAB 登入仍用於養成計算同步
   - 登入狀態留在獨立、持久的瀏覽器分區（`persist:modhub-*`，Chromium 加密保存），ModHub 檔案不存密碼或 token；「登出」會清除該分區
 - 紀錄存在 `%APPDATA%\modhub\gacha\<遊戲>\<帳號>.json`，之後只下載新紀錄；可匯出 / 匯入 JSON
 - 統計：各池總抽數、距上次最高稀有度、限定池本期大保底（終末地 120 / 武器 80）、各稀有度數量、平均出貨抽數、出貨歷史

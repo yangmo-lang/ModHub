@@ -155,44 +155,6 @@ async function hoyoOfficial(role) {
   return { fetchedAt: Date.now(), index: { total: Number(index.total_gacha_count) || 0, s: Number(index.total_s_count) || 0, curVer: index.cur_ver, tickets: index.cur_tickets || [] }, types };
 }
 
-/**
- * HoYoLAB 官方「星鐵躍遷紀錄」工具（act.hoyolab.com/sr/event/gt-aio/gacha-records）的資料
- *   index           → 總覽（各類型統計、目前版本）
- *   brief           → 摘要
- *   pool_stat       → 某類型每期卡池的統計（gacha_type）
- *   five_star_list  → 某類型某版本的 5★ 紀錄（gacha_type、version_id）
- * 回應格式沒有公開文件，所以整份原樣保存，總覽只在欄位存在時使用。
- */
-async function hoyoOfficialHsr(role) {
-  const base = 'https://sg-act-public-api.hoyolab.com/event/rpg_gacha_record';
-  const key = await hoyoAuthKey(role);
-  const q0 = { authkey: key.authkey, authkey_ver: key.authkey_ver, sign_type: key.sign_type, lang: 'zh-tw', region: role.region, game_biz: 'hkrpg_global', uid: role.uid };
-  const get = async (ep, extra = {}) => {
-    const j = await sfetchJson('hoyolab', `${base}/${ep}?${new URLSearchParams({ ...q0, ...extra })}`);
-    if (j.retcode !== 0) throw new Error(`HoYoLAB ${ep}：${j.retcode} ${j.message || ''}`);
-    return j.data || {};
-  };
-  const index = await get('index');
-  const brief = await get('brief').catch(() => null);
-  // gacha_type 可能是字串（GachaType_AvatarUp）或數字，從 index 裡找得到的都抓
-  const typeList = [];
-  const seen = new Set();
-  const walk = (o) => {
-    if (!o || typeof o !== 'object') return;
-    if (Array.isArray(o)) { o.forEach(walk); return; }
-    if (o.gacha_type != null && !seen.has(String(o.gacha_type))) { seen.add(String(o.gacha_type)); typeList.push(o.gacha_type); }
-    for (const v of Object.values(o)) walk(v);
-  };
-  walk(index);
-  if (!typeList.length) typeList.push('GachaType_AvatarUp', 'GachaType_EquipmentUp', 'GachaType_CollabAvatarUp', 'GachaType_CollabEquipmentUp', 'GachaType_Permanent', 'GachaType_Newbie');
-  const types = {};
-  for (const t of typeList) {
-    const pool = await get('pool_stat', { gacha_type: t }).catch((e) => ({ error: e.message }));
-    types[t] = { pool };
-  }
-  return { fetchedAt: Date.now(), raw: true, index, brief, types };
-}
-
 // ---------------- 登入視窗 / 狀態 ----------------
 
 async function status(provider) {
@@ -267,4 +229,4 @@ function hoyoFetchJson(url, init) {
   return sfetchJson('hoyolab', url, { ...init, headers: { 'x-rpc-language': 'zh-tw', ...(init?.headers || {}) } });
 }
 
-module.exports = { PROVIDERS, flushAll, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoOfficialHsr, hoyoFetchJson };
+module.exports = { PROVIDERS, flushAll, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };

@@ -18,7 +18,7 @@ const HOYO = (g) => g === 'ZZMI' || g === 'SRMI';
 const pct = (x) => (x == null ? '—' : `${(x * 100).toFixed(2)}%`);
 
 const GAME_TEXT = {
-  SRMI: { page: '躍遷紀錄', where: '遊戲內「躍遷」→「查看詳情」→「紀錄」', top: '5★', mid: '4★', low: '3★', token: 'authkey', freeText: '免費', bigText: 'UP' },
+  SRMI: { page: '躍遷紀錄', where: '遊戲內「躍遷」→「查看詳情」→「紀錄」', top: '5★', mid: '4★', low: '3★', token: 'authkey', freeText: '免費', bigText: 'UP', noAccount: true },
   EFMI: { page: '尋訪紀錄', where: '遊戲內「尋訪」頁面 →「尋訪紀錄」', top: '6★', mid: '5★', low: '4★', token: 'u8_token', freeText: '加急尋訪', bigText: '當期信物' },
   ZZMI: { page: '調頻紀錄', where: '遊戲內「調頻」→「調頻紀錄」', top: 'S', mid: 'A', low: 'B', token: 'authkey', freeText: '免費', bigText: 'UP' },
 };
@@ -121,8 +121,8 @@ export default function Gacha({ gameId, gameName, showToast }) {
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name || a.uid || a.id}{a.server ? ` · ${a.server}` : ''}</option>)}
           </select>
         )}
-        {loggedIn && <button className="btn primary" onClick={() => update(null, 'account')} disabled={busy}>{busy ? '更新中…' : '↻ 用帳號更新'}</button>}
-        <button className={`btn ${loggedIn ? '' : 'primary'}`} onClick={() => update()} disabled={busy}>{busy && !loggedIn ? '更新中…' : '從遊戲更新'}</button>
+        {loggedIn && !T.noAccount && <button className="btn primary" onClick={() => update(null, 'account')} disabled={busy}>{busy ? '更新中…' : '↻ 用帳號更新'}</button>}
+        <button className={`btn ${loggedIn && !T.noAccount ? '' : 'primary'}`} onClick={() => update()} disabled={busy}>{busy && (!loggedIn || T.noAccount) ? '更新中…' : '從遊戲更新'}</button>
         <button className="btn" onClick={() => setPasting(true)} disabled={busy}>貼上網址</button>
         <div className="spacer" />
         {progress && <span className="codex-src">{progress.stage}{progress.count != null ? ` · 已讀 ${progress.count} 筆` : ''}</span>}
@@ -152,7 +152,7 @@ export default function Gacha({ gameId, gameName, showToast }) {
         {error && (
           <div className="warn-box big">
             {error}
-            <div className="steps"><b>怎麼取得：</b>登入上方官方帳號後按「用帳號更新」；或開啟{gameName} → {T.where}，等頁面載入後回到 ModHub 按「從遊戲更新」。</div>
+            <div className="steps"><b>怎麼取得：</b>{T.noAccount ? '' : '登入上方官方帳號後按「用帳號更新」；或'}開啟{gameName} → {T.where}，等頁面載入後回到 ModHub 按「從遊戲更新」。</div>
           </div>
         )}
 
@@ -186,7 +186,7 @@ export default function Gacha({ gameId, gameName, showToast }) {
             {group && <GroupView group={group} T={T} onOpen={(banner) => setDetail({ group, banner })} />}
 
             {vis.totals.source === 'records' && HOYO(gameId) && (
-              <p className="card-meta center">提示：登入 HoYoLAB 後按「用帳號更新」，{gameId === 'ZZMI' ? '可取得官方統計（全部版本、UP 判定與每期卡池）。' : '會一併下載 HoYoLAB 官方躍遷統計（目前只保存，總覽仍以逐抽紀錄計算）。'}逐抽紀錄 API 只保留約 6 個月，請定期更新。</p>
+              <p className="card-meta center">{gameId === 'ZZMI' ? '提示：登入 HoYoLAB 後按「用帳號更新」，可取得官方統計（全部版本、UP 判定與每期卡池）。' : '提示：'}逐抽紀錄 API 只保留約 6 個月，請定期更新。</p>
             )}
           </>
         )}
@@ -205,16 +205,23 @@ function Intro({ gameId, gameName, T }) {
   return (
     <div className="gacha-intro">
       <h3>{gameName}{T.page}</h3>
-      <p><b>方法一：登入官方帳號（不用開遊戲）</b></p>
-      <ol>
-        <li>在上方「官方帳號」按「登入」，會開啟{gameId === 'EFMI' ? '鷹角通行證' : 'HoYoLAB'}官方登入頁，在官方頁面輸入帳號密碼。</li>
-        <li>登入後按「↻ 用帳號更新」，帳號底下的每個角色都會自動下載紀錄。</li>
-      </ol>
-      <p><b>方法二：從遊戲讀取</b></p>
+      {!T.noAccount && (
+        <>
+          <p><b>方法一：登入官方帳號（不用開遊戲）</b></p>
+          <ol>
+            <li>在上方「官方帳號」按「登入」，會開啟{gameId === 'EFMI' ? '鷹角通行證' : 'HoYoLAB'}官方登入頁，在官方頁面輸入帳號密碼。</li>
+            <li>登入後按「↻ 用帳號更新」，帳號底下的每個角色都會自動下載紀錄。</li>
+          </ol>
+        </>
+      )}
+      <p><b>{T.noAccount ? '從遊戲讀取' : '方法二：從遊戲讀取'}</b></p>
       <ol>
         <li>開啟遊戲，進入 {T.where}，等紀錄頁面載入完成。</li>
         <li>回到 ModHub 按「從遊戲更新」。</li>
       </ol>
+      {T.noAccount && (
+        <p className="card-meta">官方不接受 HoYoLAB 登入產生的{T.page}憑證，所以只能從遊戲讀取，或用「貼上網址」貼上遊戲內紀錄頁的網址。上方的 HoYoLAB 登入仍可用於「養成計算」同步。</p>
+      )}
       <p className="card-meta">紀錄存在本機，之後只下載新的；token / 連結本身不會被保存。</p>
     </div>
   );

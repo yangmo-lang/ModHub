@@ -1,7 +1,9 @@
 // 崩壞：星穹鐵道 躍遷紀錄
 // 取得 authkey 的方式和絕區零相同（參考 starrailstation.com 的匯入說明）：
 //   玩家在遊戲內開啟「躍遷 → 查看詳情 → 紀錄」後，StarRail_Data/webCaches/<版本>/Cache/Cache_Data/data_2
-//   會留下含 authkey 的網址；或由 HoYoLAB 登入產生 authkey（與 HoYoLAB 官方躍遷紀錄工具相同）。
+//   會留下含 authkey 的網址（或由使用者貼上網址）。
+//   HoYoLAB 登入產生的 hkrpg authkey 會被 getGachaLog 拒絕（-100 authkey error），官方躍遷紀錄工具
+//   （rpg_gacha_record）也只接受從遊戲內開啟，所以星鐵不提供「用帳號更新」（2026-11 實測）。
 // 一般卡池用 getGachaLog，聯動卡池（gacha_type 21 / 22）用 getLdGachaLog。authkey 只在記憶體中使用。
 const fs = require('node:fs');
 const os = require('node:os');
@@ -98,7 +100,10 @@ async function call(auth, pool, endId, size = 20) {
   const j = await r.json();
   if (j.retcode !== 0) {
     const expired = j.retcode === -101 || j.retcode === -100 || /authkey/i.test(j.message || '');
-    const e = new Error(expired ? '躍遷紀錄連結已過期，請在遊戲內開啟「躍遷 → 查看詳情 → 紀錄」後，馬上回來按「從遊戲更新」' : `星鐵 API 錯誤 ${j.retcode}：${j.message || ''}`);
+    const detail = `（${ep} gacha_type=${pool.gacha}：${j.retcode} ${j.message || ''}）`;
+    const e = new Error(expired
+      ? (auth.via === 'account' ? `HoYoLAB 產生的躍遷紀錄憑證被拒絕${detail}` : `躍遷紀錄連結已過期，請在遊戲內開啟「躍遷 → 查看詳情 → 紀錄」後，馬上回來按「從遊戲更新」${detail}`)
+      : `星鐵 API 錯誤${detail}`);
     e.expired = expired;
     throw e;
   }

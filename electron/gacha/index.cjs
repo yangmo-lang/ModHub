@@ -15,8 +15,8 @@ const SUPPORTED = { SRMI: 'hsr', EFMI: 'endfield', ZZMI: 'zzz' };
 
 // HoYoverse 遊戲（同一套 authkey / getGachaLog / HoYoLAB 登入）
 const HOYO = {
-  ZZMI: { mod: zzz, game: '絕區零', biz: 'nap_global', host: 'public-operation-nap-sg.hoyoverse.com', official: (r) => login.hoyoOfficial(r), open: '遊戲內開啟「調頻紀錄」頁面', label: '調頻紀錄' },
-  SRMI: { mod: hsr, game: '星穹鐵道', biz: 'hkrpg_global', host: 'public-operation-hkrpg-sg.hoyoverse.com', official: (r) => login.hoyoOfficialHsr(r), open: '遊戲內開啟「躍遷 → 查看詳情 → 紀錄」頁面', label: '躍遷紀錄' },
+  ZZMI: { mod: zzz, game: '絕區零', biz: 'nap_global', host: 'public-operation-nap-sg.hoyoverse.com', official: (r) => login.hoyoOfficial(r), account: true, open: '遊戲內開啟「調頻紀錄」頁面', label: '調頻紀錄' },
+  SRMI: { mod: hsr, game: '星穹鐵道', biz: 'hkrpg_global', host: 'public-operation-hkrpg-sg.hoyoverse.com', official: null, account: false, open: '遊戲內開啟「躍遷 → 查看詳情 → 紀錄」頁面', label: '躍遷紀錄' },
 };
 
 function register(ipcMain, ctx) {
@@ -113,13 +113,15 @@ function register(ipcMain, ctx) {
       if (!results.length) throw new Error('沒有已登入的鷹角帳號，或帳號底下沒有終末地角色');
     } else if (HOYO[gameId]) {
       const H = HOYO[gameId];
+      // 星鐵：HoYoLAB 產生的 authkey 會被 getGachaLog 拒絕（-100 authkey error），官方工具也只能從遊戲內開啟
+      if (!H.account) throw new Error(`${H.game}的${H.label}只能從遊戲讀取：官方不接受 HoYoLAB 登入產生的憑證。請在${H.open}後按「從遊戲更新」，或「貼上網址」`);
       const roles = await login.hoyoRoles(H.biz);
       if (!roles) throw new Error('HoYoLAB 尚未登入或登入已過期，請重新登入');
       if (!roles.length) throw new Error(`這個 HoYoLAB 帳號沒有${H.game}角色`);
       for (const role of roles) {
         progress({ stage: `${role.name || role.uid}：產生${H.label}憑證` });
         const key = await login.hoyoAuthKey(role);
-        const auth = { ...key, game_biz: H.biz, region: role.region, lang: 'zh-tw', host: H.host };
+        const auth = { ...key, game_biz: H.biz, region: role.region, lang: 'zh-tw', host: H.host, via: 'account' };
         const account = { id: role.uid, uid: role.uid, name: role.name, server: role.server, region: role.region, via: 'account' };
         const res = await pullHoyo(gameId, auth, account, (p) => progress({ ...p, stage: `${role.name}｜${p.stage}` }));
         // HoYoLAB 官方統計：全部版本的出貨紀錄、UP 判定、目前卡池
@@ -180,7 +182,12 @@ function register(ipcMain, ctx) {
         if (!auth) throw new Error(`這不是${H.game}的${H.label}網址（需要含 authkey）`);
       } else {
         const cands = H.mod.findFromCache(H.mod.findGameDataDirs(ctx.xxmiRoot()));
-        if (!cands.length) throw new Error(`找不到${H.label}連結：請先在${H.open}，或改用「登入 HoYoLAB」`);
+        if (!cands.length) {
+          const dirs = H.mod.findGameDataDirs(ctx.xxmiRoot());
+          throw new Error(dirs.length
+            ? `找不到${H.label}連結：請先在${H.open}，等頁面載入後再按「從遊戲更新」${H.account ? '，或改用「登入 HoYoLAB」' : ''}`
+            : `找不到${H.game}的遊戲資料夾：請確認遊戲已安裝並至少開過一次（XXMI 設定或遊戲日誌會記錄位置），或用「貼上網址」`);
+        }
         progress({ stage: '確認連結' });
         auth = await H.mod.pickValid(cands);
       }
@@ -190,7 +197,7 @@ function register(ipcMain, ctx) {
       const old = load(gameId, uid);
       const { data, added } = await pullHoyo(gameId, auth, { id: uid, uid, server: old?.account?.server || auth.region || auth.game_biz }, progress);
       // 有登入 HoYoLAB 且是同一個 uid：順便更新官方統計（每期卡池、UP 判定、全部版本）
-      const role = (await login.hoyoRoles(H.biz).catch(() => null))?.find((r) => r.uid === uid);
+      const role = H.official ? (await login.hoyoRoles(H.biz).catch(() => null))?.find((r) => r.uid === uid) : null;
       if (role) {
         progress({ stage: '讀取 HoYoLAB 官方統計' });
         try {
