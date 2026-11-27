@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { fetchJson } = require('./net.cjs');
-const { META, toTw } = require('./characters.cjs');
+const { META, toTw, toTwText } = require('./characters.cjs');
 
 const BASE = 'https://static.nanoka.cc';
 const NANOKA_GAME = { SRMI: 'hsr', WWMI: 'ww', ZZMI: 'zzz' };
@@ -28,7 +28,8 @@ function cleanText(s) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
-const tw = (s) => toTw(cleanText(s));
+const tw = (s) => toTwText(cleanText(s)); // 說明文字
+const twName = (s) => toTw(cleanText(s)); // 名稱（避免 里→裡）
 
 function wwAsset(p) {
   const m = /^\/Game\/Aki\/UI\/(.+?)(\.[^/]+)?$/.exec(p || '');
@@ -66,7 +67,7 @@ const NANOKA_KINDS = {
     {
       kind: 'lightcone', label: '光錐', file: 'lightcone',
       map: (id, c) => ({
-        name: tw(c.zh), en: cleanText(c.en),
+        name: twName(c.zh), en: cleanText(c.en),
         rarity: Number(/(\d)$/.exec(c.rank || '')?.[1]) || null,
         role: META.hsr.role[c.baseType] || c.baseType,
         icon: `${BASE}/assets/hsr/lightconemediumicon/${id}.webp`,
@@ -82,7 +83,7 @@ const NANOKA_KINDS = {
       map: (id, c) => {
         const rover = /漂泊者/.test(c.zh || '');
         return {
-          name: tw(c.zh) + (rover ? (/zhujuenan/i.test(c.background || '') ? '（男）' : '（女）') : ''),
+          name: twName(c.zh) + (rover ? (/zhujuenan/i.test(c.background || '') ? '（男）' : '（女）') : ''),
           en: cleanText(c.en),
           rarity: c.rank || null,
           element: META.ww.element[c.element] || null,
@@ -97,7 +98,7 @@ const NANOKA_KINDS = {
     {
       kind: 'weapon', label: '武器', file: 'weapon',
       map: (id, c) => ({
-        name: tw(c.zh), en: cleanText(c.en),
+        name: twName(c.zh), en: cleanText(c.en),
         rarity: c.rank || null,
         role: META.ww.role[c.type] || null,
         icon: wwAsset(c.icon), portrait: wwAsset(c.icon),
@@ -110,7 +111,7 @@ const NANOKA_KINDS = {
     {
       kind: 'character', label: '代理人', file: 'character',
       map: (id, c) => ({
-        name: tw(c.zh), en: cleanText(c.en),
+        name: twName(c.zh), en: cleanText(c.en),
         rarity: c.rank ? c.rank + 1 : null,
         rarityLabel: ZZZ_RANK[c.rank] || null,
         element: META.zzz.element[c.element] || null,
@@ -128,7 +129,7 @@ const NANOKA_KINDS = {
     {
       kind: 'weapon', label: '音擎', file: 'weapon',
       map: (id, c) => ({
-        name: tw(c.zh), en: cleanText(c.en),
+        name: twName(c.zh), en: cleanText(c.en),
         rarity: c.rank ? c.rank + 1 : null,
         rarityLabel: ZZZ_RANK[c.rank] || null,
         role: META.zzz.role[c.type] || null,
@@ -141,7 +142,7 @@ const NANOKA_KINDS = {
     {
       kind: 'bangboo', label: '邦布', file: 'bangboo',
       map: (id, c) => ({
-        name: tw(c.zh), en: cleanText(c.en),
+        name: twName(c.zh), en: cleanText(c.en),
         rarity: c.rank ? c.rank + 1 : null,
         rarityLabel: ZZZ_RANK[c.rank] || null,
         icon: zzzIcon(c.icon),
@@ -240,12 +241,12 @@ async function nanokaDetail(gameId, kind, id, version) {
   const fx = (s) => tw(String(s || '').replace(/#\d+\[[a-z0-9]+\]%?/gi, '?'));
   if (game === 'hsr') {
     desc = tw(d.desc);
-    if (kind === 'lightcone' && d.refinements) effect = { name: tw(d.refinements.name), desc: fx(d.refinements.desc) };
+    if (kind === 'lightcone' && d.refinements) effect = { name: twName(d.refinements.name), desc: fx(d.refinements.desc) };
   } else if (game === 'ww') {
     desc = tw(d.desc);
     add('稱號', d.nick_name);
     if (d.tag) add('定位', Object.values(d.tag).map((t) => t.name).join('、'));
-    if (kind === 'weapon' && d.effect) effect = { name: tw(d.effect_name), desc: fx(d.effect) };
+    if (kind === 'weapon' && d.effect) effect = { name: twName(d.effect_name), desc: fx(d.effect) };
   } else if (game === 'zzz') {
     if (kind === 'character') {
       const p = d.partner_info || {};
@@ -303,7 +304,7 @@ function sklandCodex(w, DETAIL) {
         id: String(it.id), kind, name: toTw(it.name), zh: it.name, en: '',
         rarity: t.rarity, element: t.element, role: t.role, extraTags: t.tags,
         icon: it.cover, portrait: it.cover,
-        desc: toTw(it.caption || ''),
+        desc: toTwText(it.caption || ''),
         preview: it.dotType === 'label_type_preview',
         up: it.dotType === 'label_type_up',
         order: n - i,

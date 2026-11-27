@@ -179,6 +179,7 @@ app.whenReady().then(() => {
   gacha.register(ipcMain, {
     userData: () => app.getPath('userData'),
     xxmiRoot: () => settings.xxmiRoot,
+    getCodex: (gameId) => codex.getCodex(app.getPath('userData'), gameId, { loadWiki: () => skland.loadWiki(), DETAIL: skland.DETAIL }),
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
 

@@ -76,10 +76,21 @@ npm test         # 掃描/切換邏輯單元測試
   - 絕區零：讀遊戲 `ZenlessZoneZero_Data\webCaches\<版本>\Cache\Cache_Data\data_2` 裡 `auth_appid=webview_gacha` 的 authkey，
     呼叫官方 `getGachaLog`；另有按鈕開啟 HoYoLAB 官方調頻紀錄頁
 - token / authkey 只在記憶體中使用，不寫入檔案；連結有效時間很短，開完紀錄頁要馬上更新
+- **官方帳號登入（不用開遊戲）**：「官方帳號」列按「登入」會開啟官方登入頁（帳密只輸入在官方網頁上）
+  - 終末地：鷹角通行證（國際服 user.gryphline.com / 國服 user.hypergryph.com）→ `cookie_store/account_token`
+    → `as.*/user/oauth2/v2/grant` → `binding_list`（找出所有終末地角色）→ `u8_token_by_uid` → 紀錄 API
+  - 絕區零：HoYoLAB 登入 → `getUserGameRolesByCookieToken` → `genAuthKeyByCookieToken`（auth_appid=webview_gacha）→ `getGachaLog`
+    （與 HoYoLAB 官方調頻查詢工具相同的取得 authkey 方式）
+  - 登入狀態留在獨立、持久的瀏覽器分區（`persist:modhub-*`，Chromium 加密保存），ModHub 檔案不存密碼或 token；「登出」會清除該分區
 - 紀錄存在 `%APPDATA%\modhub\gacha\<遊戲>\<帳號>.json`，之後只下載新紀錄；可匯出 / 匯入 JSON
 - 統計：各池總抽數、距上次最高稀有度、限定池本期大保底（終末地 120 / 武器 80）、各稀有度數量、平均出貨抽數、出貨歷史
   - 終末地的免費抽（加急招募）不累計保底，免費抽出的 6★ 也不重置保底；`gift_*` 獎勵不算抽數
-- 尚未支援：UIGF 標準格式匯入匯出、UP / 歪的判定
+- **圖像化總覽**（亮色報表風格）：總抽數、最高稀有度出率、UP 不歪率；依卡池類型分頁，
+  最近 3 期大欄位（出貨頭像、歪標記、出貨抽數、加急 / 已墊、距保底）、過往卡池速覽；點卡池進入單期頁（逐抽格子，T 編號）
+  - 終末地：UP 角色與立繪來自公開的 `ef-webview…/api/content`（近期卡池）；查不到的舊卡池用常駐池 6★ 名單判斷歪
+  - 絕區零：登入 HoYoLAB 時另抓官方調頻查詢工具的統計（`/api/zzz/index`、`hist_pool_stat`、`cur_pool_stat`），
+    含全部版本、官方 is_up 與圖示；逐抽紀錄 API 只保留約 6 個月
+- 尚未支援：UIGF 標準格式匯入匯出
 
 ### 線上下載（GameBanana / Nexus Mods）
 

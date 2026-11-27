@@ -198,6 +198,26 @@ async function fetchRecords(auth, known = new Set(), onProgress) {
   return { records: out, rules };
 }
 
+/**
+ * 卡池內容（公開 API，不需 token）：UP 6★ 名稱、UP 立繪、池內所有 6★
+ * 只有近期卡池查得到，舊卡池回傳 null
+ */
+async function fetchPoolContent(provider, serverId, poolId, lang = 'zh-tw') {
+  try {
+    const q = new URLSearchParams({ lang, pool_id: poolId, server_id: serverId });
+    const j = await getJson(`https://ef-webview.${provider}.com/api/content?${q}`);
+    const p = j?.code === 0 ? j.data?.pool : null;
+    if (!p) return null;
+    return {
+      name: toTw(p.pool_name || ''),
+      up6: toTw(p.up6_name || '') || null,
+      up6Avatar: p.up6_avatar || p.up6_image || null,
+      all6: (p.all || []).filter((x) => Number(x.rarity) === 6).map((x) => toTw(x.name)),
+      fetchedAt: Date.now(),
+    };
+  } catch { return null; }
+}
+
 /** 依紀錄重建保底規則（不需連網） */
 function rulesFor(records) {
   const rules = {};
@@ -215,4 +235,4 @@ function rulesFor(records) {
   return rules;
 }
 
-module.exports = { parseGachaUrl, findFromLog, queryRole, fetchRecords, rulesFor, normChar, normWeapon, weaponPoolType, CHAR_POOLS };
+module.exports = { parseGachaUrl, findFromLog, queryRole, fetchRecords, fetchPoolContent, rulesFor, normChar, normWeapon, weaponPoolType, CHAR_POOLS };

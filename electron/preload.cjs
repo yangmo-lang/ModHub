@@ -45,6 +45,10 @@ contextBridge.exposeInMainWorld('modhub', {
   gachaImport: (gameId) => ipcRenderer.invoke('gacha:import', gameId),
   gachaOfficial: (gameId) => ipcRenderer.invoke('gacha:official', gameId),
   onGachaProgress: on('gacha:progress'),
+  gachaLoginStatus: (gameId) => ipcRenderer.invoke('gacha:loginStatus', gameId),
+  gachaVisual: (gameId, accountId) => ipcRenderer.invoke('gacha:visual', gameId, accountId),
+  gachaGrid: (gameId, accountId, opts) => ipcRenderer.invoke('gacha:grid', gameId, accountId, opts),  gachaLogin: (gameId, provider) => ipcRenderer.invoke('gacha:login', gameId, provider),
+  gachaLogout: (gameId, provider) => ipcRenderer.invoke('gacha:logout', gameId, provider),
 
   // 線上
   onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),

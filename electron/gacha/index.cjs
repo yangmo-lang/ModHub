@@ -5,6 +5,9 @@ const { dialog, shell } = require('electron');
 const stats = require('./stats.cjs');
 const ef = require('./endfield.cjs');
 const zzz = require('./zzz.cjs');
+const login = require('./login.cjs');
+const visual = require('./visual.cjs');
+const { normalizeName, toTw } = require('../characters.cjs');
 
 const SUPPORTED = { EFMI: 'endfield', ZZMI: 'zzz' };
 
@@ -42,9 +45,95 @@ function register(ipcMain, ctx) {
     return d ? view(gameId, d) : null;
   });
 
-  /** 更新：自動從遊戲讀取連結（或使用者貼上的網址），增量下載並合併 */
+  // ---- 終末地卡池內容快取（UP 角色、立繪）：存在 _meta 資料夾，不會被當成帳號 ----
+  const poolsFile = () => path.join(dir('EFMI'), '_meta', 'pools.json');
+  const loadPools = () => { try { return JSON.parse(fs.readFileSync(poolsFile(), 'utf8')); } catch { return {}; } };
+  async function refreshPoolInfo(provider, serverId, records) {
+    const cache = loadPools();
+    const ids = [...new Set(records.map((r) => r.bannerId).filter(Boolean)), 'standard'];
+    let changed = false;
+    for (const id of ids) {
+      const c = cache[id];
+      // 查到的不再查；查不到的（舊卡池）一天最多重試一次
+      if (c && (c.up6 || c.all6?.length || Date.now() - (c.fetchedAt || 0) < 86400000)) continue;
+      const info = await ef.fetchPoolContent(provider, serverId, id);
+      cache[id] = info || { missing: true, fetchedAt: Date.now() };
+      changed = true;
+    }
+    if (changed) {
+      fs.mkdirSync(path.dirname(poolsFile()), { recursive: true });
+      fs.writeFileSync(poolsFile(), JSON.stringify(cache));
+    }
+  }
+
+  /** 用一組臨時憑證下載某個帳號的新紀錄並合併存檔（保留官方統計等其他欄位） */
+  async function pullEndfield(auth, account, progress) {
+    const old = load('EFMI', account.id);
+    const known = new Set((old?.records || []).map((r) => r.id));
+    const { records } = await ef.fetchRecords(auth, known, progress);
+    const data = { ...old, account: { ...old?.account, ...account, serverId: auth.serverId }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, records) };
+    save('EFMI', data);
+    progress({ stage: '讀取卡池資訊' });
+    await refreshPoolInfo(auth.provider, auth.serverId, data.records).catch(() => {});
+    return { data, added: records.length };
+  }
+
+  async function pullZzz(auth, account, progress) {
+    const old = load('ZZMI', account.id);
+    const known = new Set((old?.records || []).map((r) => r.id));
+    const { records } = await zzz.fetchRecords(auth, known, progress);
+    const data = { ...old, account: { ...old?.account, ...account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, records) };
+    save('ZZMI', data);
+    return { data, added: records.length };
+  }
+
+  /** 用已登入的官方帳號更新：帳號底下每個角色都更新 */
+  async function updateByAccount(gameId, progress) {
+    const results = [];
+    if (gameId === 'EFMI') {
+      for (const provider of ['gryphline', 'hypergryph']) {
+        const s = await login.hgRoles(provider).catch(() => null);
+        if (!s) continue;
+        for (const role of s.roles) {
+          progress({ stage: `${role.name || role.roleId}：換取憑證` });
+          const token = await login.hgU8Token(provider, role.uid, s.oauth);
+          const auth = { provider, token, serverId: role.serverId, lang: 'zh-tw' };
+          const account = { id: `${provider}-${role.roleId}`, name: role.name, server: role.server || (provider === 'gryphline' ? '國際服' : '官服'), provider, via: 'account' };
+          results.push(await pullEndfield(auth, account, (p) => progress({ ...p, stage: `${role.name}｜${p.stage}` })));
+        }
+      }
+      if (!results.length) throw new Error('沒有已登入的鷹角帳號，或帳號底下沒有終末地角色');
+    } else if (gameId === 'ZZMI') {
+      const roles = await login.hoyoRoles();
+      if (!roles) throw new Error('HoYoLAB 尚未登入或登入已過期，請重新登入');
+      if (!roles.length) throw new Error('這個 HoYoLAB 帳號沒有絕區零角色');
+      for (const role of roles) {
+        progress({ stage: `${role.name || role.uid}：產生調頻紀錄憑證` });
+        const key = await login.hoyoAuthKey(role);
+        const auth = { ...key, game_biz: 'nap_global', region: role.region, lang: 'zh-tw', host: 'public-operation-nap-sg.hoyoverse.com' };
+        const account = { id: role.uid, uid: role.uid, name: role.name, server: role.server, via: 'account' };
+        const res = await pullZzz(auth, account, (p) => progress({ ...p, stage: `${role.name}｜${p.stage}` }));
+        // HoYoLAB 官方統計：全部版本的出貨紀錄、UP 判定、目前卡池
+        progress({ stage: `${role.name}｜讀取官方統計` });
+        try {
+          res.data.official = await login.hoyoOfficial(role);
+          save('ZZMI', res.data);
+        } catch (e) {
+          progress({ stage: `官方統計讀取失敗：${e.message}` });
+        }
+        results.push(res);
+      }
+    } else {
+      throw new Error('這個遊戲還不支援抽卡紀錄');
+    }
+    const first = results[0];
+    return { ...view(gameId, first.data), added: results.reduce((s, r) => s + r.added, 0), accounts: results.length };
+  }
+
+  /** 更新：mode = 'account'（官方帳號）、或從遊戲讀取連結 / 使用者貼上的網址 */
   ipcMain.handle('gacha:update', async (_e, gameId, opts = {}) => {
     const progress = (p) => ctx.emit('gacha:progress', { gameId, ...p });
+    if (opts.mode === 'account') return updateByAccount(gameId, progress);
     if (gameId === 'EFMI') {
       const auth = opts.url ? ef.parseGachaUrl(opts.url) : ef.findFromLog();
       if (!auth) throw new Error(opts.url ? '這不是終末地的尋訪紀錄網址' : '找不到抽卡連結：請先在遊戲內開啟「尋訪紀錄」頁面');
@@ -53,12 +142,8 @@ function register(ipcMain, ctx) {
       const account = role
         ? { id: `${auth.provider}-${role.id}`, name: role.name, server: role.server || (auth.provider === 'gryphline' ? '國際服' : '官服'), provider: auth.provider }
         : { id: `${auth.provider}-server${auth.serverId}`, name: '', server: auth.provider === 'gryphline' ? '國際服' : '官服', provider: auth.provider };
-      const old = load(gameId, account.id);
-      const known = new Set((old?.records || []).map((r) => r.id));
-      const { records } = await ef.fetchRecords(auth, known, progress);
-      const data = { account, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, records) };
-      save(gameId, data);
-      return { ...view(gameId, data), added: records.length };
+      const { data, added } = await pullEndfield(auth, account, progress);
+      return { ...view(gameId, data), added };
     }
     if (gameId === 'ZZMI') {
       let auth;
@@ -67,22 +152,80 @@ function register(ipcMain, ctx) {
         if (!auth) throw new Error('這不是絕區零的調頻紀錄網址（需要含 authkey）');
       } else {
         const cands = zzz.findFromCache(zzz.findGameDataDirs(ctx.xxmiRoot()));
-        if (!cands.length) throw new Error('找不到調頻紀錄連結：請先在遊戲內開啟「調頻紀錄」頁面');
+        if (!cands.length) throw new Error('找不到調頻紀錄連結：請先在遊戲內開啟「調頻紀錄」頁面，或改用「登入 HoYoLAB」');
         progress({ stage: '確認連結' });
         auth = await zzz.pickValid(cands);
       }
       // 先查 uid，才知道要合併到哪個帳號、哪些紀錄已經有了
       progress({ stage: '確認帳號' });
       const uid = (await zzz.probeUid(auth)) || 'unknown';
-      const account = { id: uid, name: '', server: auth.region || auth.game_biz, uid };
-      const old = load(gameId, account.id);
-      const known = new Set((old?.records || []).map((r) => r.id));
-      const { records } = await zzz.fetchRecords(auth, known, progress);
-      const data = { account: { ...old?.account, ...account }, updatedAt: Date.now(), records: stats.mergeRecords(old?.records, records) };
-      save(gameId, data);
-      return { ...view(gameId, data), added: records.length };
+      const { data, added } = await pullZzz(auth, { id: uid, server: auth.region || auth.game_biz, uid }, progress);
+      return { ...view(gameId, data), added };
     }
     throw new Error('這個遊戲還不支援抽卡紀錄');
+  });
+
+  // ---- 圖像化總覽 ----
+  async function iconMap(gameId) {
+    const map = {};
+    try {
+      const c = await ctx.getCodex(gameId);
+      for (const s of c.sections) for (const it of s.items) {
+        if (!it.icon) continue;
+        for (const n of [it.name, it.zh, it.en]) if (n) map[normalizeName(toTw(n))] = it.icon;
+      }
+    } catch {}
+    return map;
+  }
+
+  ipcMain.handle('gacha:visual', async (_e, gameId, accountId) => {
+    const d = load(gameId, accountId);
+    if (!d) return null;
+    if (gameId === 'EFMI') {
+      const provider = d.account.provider || 'gryphline';
+      const serverId = d.account.serverId || (provider === 'gryphline' ? '2' : '1');
+      await refreshPoolInfo(provider, serverId, d.records).catch(() => {});
+    }
+    const icons = await iconMap(gameId);
+    // 官方統計裡的圖示也加進去（逐抽格子用）
+    if (d.official?.types) {
+      for (const t of Object.values(d.official.types)) for (const p of [...(t.hist || []), ...(t.cur || [])]) {
+        for (const x of [...(p.cur_records || []), ...(p.cur_item_list || [])]) if (x.icon && x.name) icons[normalizeName(x.name)] = icons[normalizeName(x.name)] || x.icon;
+      }
+    }
+    const v = gameId === 'EFMI' ? visual.buildEndfield(d.records, loadPools(), icons) : visual.buildZzz(d.records, d.official, icons);
+    return {
+      account: d.account,
+      updatedAt: d.updatedAt,
+      officialAt: d.official?.fetchedAt || null,
+      recordCount: d.records.length,
+      recordRange: d.records.length ? [d.records[0].time, d.records[d.records.length - 1].time] : null,
+      ...v,
+      icons,
+    };
+  });
+
+  ipcMain.handle('gacha:grid', async (_e, gameId, accountId, opts) => {
+    const d = load(gameId, accountId);
+    if (!d) return [];
+    const icons = await iconMap(gameId);
+    return visual.pullGrid(d.records, icons, opts);
+  });
+
+  ipcMain.handle('gacha:records', (_e, gameId, accountId) => load(gameId, accountId)?.records || []);
+
+  // ---- 官方帳號登入 ----
+  const providersOf = (gameId) => (gameId === 'EFMI' ? ['gryphline', 'hypergryph'] : gameId === 'ZZMI' ? ['hoyolab'] : []);
+  ipcMain.handle('gacha:loginStatus', async (_e, gameId) => Promise.all(providersOf(gameId).map(async (p) => ({ provider: p, label: login.PROVIDERS[p].label, ...(await login.status(p)) }))));
+  ipcMain.handle('gacha:login', async (e, gameId, provider) => {
+    if (!providersOf(gameId).includes(provider)) throw new Error('不支援的帳號類型');
+    const { BrowserWindow } = require('electron');
+    await login.openLogin(provider, BrowserWindow.fromWebContents(e.sender));
+    return { provider, label: login.PROVIDERS[provider].label, ...(await login.status(provider)) };
+  });
+  ipcMain.handle('gacha:logout', async (_e, gameId, provider) => {
+    if (!providersOf(gameId).includes(provider)) throw new Error('不支援的帳號類型');
+    return login.logout(provider);
   });
 
   ipcMain.handle('gacha:export', async (_e, gameId, accountId) => {

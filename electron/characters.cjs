@@ -12,7 +12,9 @@ const OpenCC = require('opencc-js');
 
 const BASE = 'https://static.nanoka.cc';
 const UA = 'ModHub/0.1 (+local mod manager)';
-const toTw = OpenCC.Converter({ from: 'cn', to: 'tw' });
+const toTwText = OpenCC.Converter({ from: 'cn', to: 'tw' });
+// 人名 / 物品名：OpenCC 會把「里」轉成「裡」（例如 賽維里安 → 賽維裡安），名稱裡幾乎不會用「裡」，轉回來
+const toTw = (s) => toTwText(String(s ?? '')).replace(/裡/g, '里');
 
 // XXMI 代號 → 圖鑑來源
 const SOURCES = { SRMI: 'hsr', WWMI: 'ww', ZZMI: 'zzz', EFMI: 'endfield' };
@@ -375,6 +377,7 @@ module.exports = {
   SOURCES,
   NANOKA_GAME,
   toTw,
+  toTwText,
   normalizeName,
   folderSafeName,
   buildCharacterList,
