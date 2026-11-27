@@ -5,6 +5,8 @@ const errText = (e) => String(e?.message || e).replace(/^Error invoking remote m
 export const fmtSize = (n) => (n >= 1 << 30 ? `${(n / (1 << 30)).toFixed(2)} GB` : n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const fmtDate = (t) => (t ? new Date(t).toLocaleDateString() : '');
 const SOURCES = [['gamebanana', 'GameBanana'], ['nexus', 'Nexus Mods']];
+const AUTO_TR_KEY = 'modhub.autoTranslate';
+const LANG_NAME = { en: '英文', ja: '日文', ko: '韓文', ru: '俄文', es: '西班牙文', pt: '葡萄牙文', fr: '法文', de: '德文', vi: '越南文', th: '泰文', id: '印尼文' };
 const SORTS = [['new', '最新上傳'], ['updated', '最近更新'], ['popular', '熱門']];
 
 export default function Online({ gameId, characters, showAdult, setShowAdult, showToast, seed }) {
@@ -131,15 +133,66 @@ export default function Online({ gameId, characters, showAdult, setShowAdult, sh
       </div>
 
       {detail && (
-        <Detail detail={detail} source={source} onClose={() => setDetail(null)} onDownload={download} />
+        <Detail gameId={gameId} detail={detail} source={source} onClose={() => setDetail(null)} onDownload={download} />
       )}
     </div>
   );
 }
 
-function Detail({ detail, source, onClose, onDownload }) {
+/** 說明與檔案說明翻譯成繁體中文（預設自動翻譯，可切回原文） */
+function useTranslation(gameId, d) {
+  const [auto, setAutoState] = useState(() => localStorage.getItem(AUTO_TR_KEY) !== '0');
+  const [tr, setTr] = useState(null); // { loading, error, desc, files, engine, lang }
+  const [showOriginal, setShowOriginal] = useState(false);
+  const setAuto = (v) => { setAutoState(v); localStorage.setItem(AUTO_TR_KEY, v ? '1' : '0'); };
+  const run = useCallback(async () => {
+    if (!d) return;
+    const files = (d.files || []).filter((f) => f.description);
+    const texts = [d.description || '', ...files.map((f) => f.description)];
+    if (!texts.some((t) => t.trim())) return;
+    setTr({ loading: true });
+    setShowOriginal(false);
+    try {
+      const r = await api.onlineTranslate(gameId, texts);
+      const google = r.find((x) => x.engine === 'google');
+      setTr({
+        desc: r[0].text,
+        files: Object.fromEntries(files.map((f, i) => [f.id, r[i + 1].text])),
+        engine: google ? 'google' : 'opencc',
+        lang: google?.lang || '',
+      });
+    } catch (e) {
+      setTr({ error: errText(e) });
+    }
+  }, [gameId, d]);
+  useEffect(() => { setTr(null); if (d && auto) run(); }, [d]); // eslint-disable-line react-hooks/exhaustive-deps
+  const active = tr && !tr.loading && !tr.error && !showOriginal;
+  return { auto, setAuto, tr, run, showOriginal, setShowOriginal, active };
+}
+
+function TranslateBar({ t, hasText }) {
+  if (!hasText) return null;
+  const { tr } = t;
+  return (
+    <div className="tr-bar">
+      {!tr && <button className="link" onClick={t.run}>譯為繁體中文</button>}
+      {tr?.loading && <span>翻譯中…</span>}
+      {tr?.error && <><span className="error-text">翻譯失敗：{tr.error}</span><button className="link" onClick={t.run}>重試</button></>}
+      {tr && !tr.loading && !tr.error && (
+        <>
+          <span>{t.showOriginal ? '原文' : tr.engine === 'google' ? `Google 翻譯${LANG_NAME[tr.lang] ? `（原文：${LANG_NAME[tr.lang]}）` : ''}` : '已轉為繁體中文'}</span>
+          <button className="link" onClick={() => t.setShowOriginal((v) => !v)}>{t.showOriginal ? '顯示譯文' : '顯示原文'}</button>
+        </>
+      )}
+      <label className="check" title="開啟 MOD 時自動翻譯說明"><input type="checkbox" checked={t.auto} onChange={(e) => t.setAuto(e.target.checked)} />自動翻譯</label>
+    </div>
+  );
+}
+
+function Detail({ gameId, detail, source, onClose, onDownload }) {
   const d = detail.data;
   const [img, setImg] = useState(0);
+  const t = useTranslation(gameId, d);
   const it = d || detail.item;
   const images = d?.images?.length ? d.images : [it.thumb].filter(Boolean);
   return (
@@ -186,7 +239,7 @@ function Detail({ detail, source, onClose, onDownload }) {
                     {fmtSize(f.size)} · {fmtDate(f.date)}{f.version ? ` · v${f.version}` : ''}{f.category ? ` · ${f.category}` : ''}
                     {f.scan && <span className={f.scan === 'clean' ? 'ok' : 'warn-text'}> · 掃毒 {f.scan === 'clean' ? '安全' : f.scan}</span>}
                   </small>
-                  {f.description && <small className="file-desc">{f.description}</small>}
+                  {f.description && <small className="file-desc">{t.active && t.tr.files?.[f.id] ? t.tr.files[f.id] : f.description}</small>}
                 </div>
                 <button className="btn primary" onClick={() => onDownload(d, f)}>下載安裝</button>
               </div>
@@ -206,7 +259,8 @@ function Detail({ detail, source, onClose, onDownload }) {
             {d?.description && (
               <>
                 <h4>說明</h4>
-                <div className="desc">{d.description}</div>
+                <TranslateBar t={t} hasText />
+                <div className="desc">{t.active ? t.tr.desc : d.description}</div>
               </>
             )}
           </div>

@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('modhub', {
   // 線上
   onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),
   onlineDetails: (gameId, source, modId) => ipcRenderer.invoke('online:details', gameId, source, modId),
+  onlineTranslate: (gameId, texts) => ipcRenderer.invoke('online:translate', gameId, texts),
   onlineDownload: (gameId, source, modId, fileId) => ipcRenderer.invoke('online:download', gameId, source, modId, fileId),
   pickArchives: (gameId) => ipcRenderer.invoke('local:pick', gameId),
   installFromPaths: (gameId, paths) => ipcRenderer.invoke('local:fromPaths', gameId, paths),

@@ -8,6 +8,7 @@ const nx = require('./sources/nexus.cjs');
 const net = require('./net.cjs');
 const installer = require('./installer.cjs');
 const scanner = require('./scanner.cjs');
+const translator = require('./translate.cjs');
 
 const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com|(hsr|ww|zzz)\.nanoka\.cc|wiki\.skland\.com|www\.skland\.com|ef\.yituliu\.cn|cos\.yituliu\.cn|github\.com|creativecommons\.org|www\.bilibili\.com)\//i;
 
@@ -93,6 +94,17 @@ function register(ipcMain, ctx) {
   ipcMain.handle('online:list', async (_e, gameId, source, opts) => {
     const r = source === 'nexus' ? await nx.list(gameId, opts) : await gb.list(gameId, opts);
     return { ...r, items: annotate(gameId, r.items) };
+  });
+
+  // 說明翻譯成繁體中文：texts = 字串陣列（說明、各檔案說明），用圖鑑角色名當詞彙表
+  ipcMain.handle('online:translate', async (_e, gameId, texts) => {
+    const chars = ctx.matcherFor(gameId)?.c?.data.characters || [];
+    const glossary = chars.map((c) => ({ en: c.en, zh: c.nameTw || c.name }));
+    const out = [];
+    for (const t of (Array.isArray(texts) ? texts : []).slice(0, 40)) {
+      out.push(await translator.translate(String(t || '').slice(0, 20000), { glossary }));
+    }
+    return out;
   });
 
   ipcMain.handle('online:details', async (_e, gameId, source, modId) => {
