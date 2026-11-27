@@ -71,6 +71,8 @@ export default function App() {
   const [dragOver, setDragOver] = useState(false);
   const [showAdult, setShowAdultState] = useState(false);
   const [toast, showToast] = useToast();
+  const update = useUpdate();
+  const [updateHidden, setUpdateHidden] = useState(false);
 
   // 下載 / 安裝佇列
   const openInstall = (j) => {
@@ -500,6 +502,8 @@ export default function App() {
           onSave={async (patch) => { await api.saveSettings(patch); await loadState(); setShowSettings(false); rescan(); }} />
       )}
 
+      {!updateHidden && <UpdateBar update={update} onHide={() => setUpdateHidden(true)} />}
+
       {toast && <div key={toast.id} className={`toast ${toast.kind}`}>{toast.msg}</div>}
     </div>
   );
@@ -607,10 +611,75 @@ function Settings({ settings, onClose, onSave }) {
           <div className="row"><input value={qaqRoot} onChange={(e) => setQaqRoot(e.target.value)} /><button className="btn" onClick={() => pick(setQaqRoot)}>瀏覽</button></div>
         </label>
         <NexusSettings />
+        <UpdateSettings />
         <div className="row end">
           <button className="btn ghost" onClick={onClose}>取消</button>
           <button className="btn primary" onClick={() => onSave({ xxmiRoot, qaqRoot })}>儲存</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------- 自動更新 ----------------
+function useUpdate() {
+  const [s, setS] = useState(null);
+  useEffect(() => {
+    api.updateState().then(setS).catch(() => {});
+    return api.onUpdateStatus(setS);
+  }, []);
+  return s;
+}
+
+/** 有新版時畫面右下角的提示 */
+function UpdateBar({ update, onHide }) {
+  if (!update || !['available', 'downloading', 'downloaded'].includes(update.status)) return null;
+  const portable = update.mode === 'portable';
+  return (
+    <div className="update-bar">
+      {update.status === 'available' && (
+        <>
+          <span>ModHub 有新版本 <b>v{update.latest}</b>（目前 v{update.version}）</span>
+          <button className="btn small primary" onClick={() => api.updateDownload()}>{portable ? '到下載頁面' : '下載更新'}</button>
+          <button className="link" onClick={onHide}>稍後</button>
+        </>
+      )}
+      {update.status === 'downloading' && <span>正在下載 v{update.latest}… {update.percent || 0}%</span>}
+      {update.status === 'downloaded' && (
+        <>
+          <span>v{update.latest} 已下載完成</span>
+          <button className="btn small primary" onClick={() => api.updateInstall()}>重新啟動並更新</button>
+          <button className="link" onClick={onHide} title="下次關閉 ModHub 時自動安裝">稍後</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+const UPDATE_TEXT = {
+  idle: '', checking: '檢查中…', latest: '已是最新版本', dev: '開發模式不檢查更新',
+  available: '有新版本', downloading: '下載中…', downloaded: '已下載，重新啟動即可更新', error: '檢查失敗',
+};
+
+/** 設定視窗裡的版本與「檢查更新」 */
+function UpdateSettings() {
+  const s = useUpdate();
+  if (!s) return null;
+  return (
+    <div className="update-settings">
+      <b>版本</b>
+      <span>ModHub v{s.version}{s.mode === 'portable' ? '（免安裝版：有新版時請到下載頁面更新）' : s.mode === 'dev' ? '（開發模式）' : ''}</span>
+      <span className="card-meta">
+        {UPDATE_TEXT[s.status] || ''}
+        {s.latest && s.status !== 'latest' ? ` v${s.latest}` : ''}
+        {s.status === 'downloading' ? ` ${s.percent || 0}%` : ''}
+        {s.status === 'error' && s.error ? `：${s.error}` : ''}
+      </span>
+      <div className="row">
+        <button className="btn small" disabled={s.mode === 'dev' || s.status === 'checking' || s.status === 'downloading'} onClick={() => api.updateCheck()}>檢查更新</button>
+        {s.status === 'available' && <button className="btn small primary" onClick={() => api.updateDownload()}>{s.mode === 'portable' ? '到下載頁面' : '下載更新'}</button>}
+        {s.status === 'downloaded' && <button className="btn small primary" onClick={() => api.updateInstall()}>重新啟動並更新</button>}
+        <button className="link" onClick={() => api.updateOpenReleases()}>更新紀錄</button>
       </div>
     </div>
   );

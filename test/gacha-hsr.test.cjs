@@ -27,6 +27,31 @@ test('星鐵：紀錄正規化（時區依伺服器、5★ 為最高稀有度）
   assert.equal(hsr.norm({ ...x, rank_type: '4' }, pool).tier, 'mid');
 });
 
+test('星鐵：被限速（-110）時等待後重試，持續限速才回報', async () => {
+  const saved = { ...hsr.RATE };
+  const realFetch = global.fetch;
+  Object.assign(hsr.RATE, { gap: 0, backoff: 1, retries: 3 });
+  const auth = { authkey: 'k', authkey_ver: '1', sign_type: '2', game_biz: 'hkrpg_global', host: 'example.invalid' };
+  const reply = (j) => ({ ok: true, json: async () => j });
+  try {
+    let n = 0;
+    global.fetch = async () => (++n <= 2 ? reply({ retcode: -110, message: 'visit too frequently' }) : reply({ retcode: 0, data: { list: [{ uid: '800123' }] } }));
+    assert.equal(await hsr.probeUid(auth), '800123');
+    assert.equal(n, 3, '兩次限速後第三次成功');
+
+    n = 0;
+    global.fetch = async () => { n++; return reply({ retcode: -110, message: 'visit too frequently' }); };
+    await assert.rejects(hsr.pickValid([auth, { ...auth, authkey: 'k2' }]), (e) => e.rateLimited && /太頻繁/.test(e.message));
+    assert.equal(n, 4, '重試 3 次後放棄，也不再換下一個連結');
+
+    global.fetch = async () => reply({ retcode: -101, message: 'authkey timeout' });
+    await assert.rejects(hsr.pickValid([auth]), (e) => e.expired && !e.rateLimited);
+  } finally {
+    global.fetch = realFetch;
+    Object.assign(hsr.RATE, saved);
+  }
+});
+
 test('星鐵：限定池依 gacha_id 分期、保底跨期、常駐 5★ 算歪', () => {
   let seq = 0;
   const r = (pool, gid, tier, name) => ({ id: String(++seq), pool, bannerId: gid, name, tier, rarity: tier === 'top' ? 5 : 3, time: seq * 1000 });

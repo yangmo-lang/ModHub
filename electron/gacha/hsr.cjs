@@ -87,7 +87,29 @@ function findFromCache(dataDirs) {
   return cands.filter((c) => (seen.has(c.authkey) ? false : (seen.add(c.authkey), true)));
 }
 
+// 官方 API 會限速（retcode -110 visit too frequently）：每個請求至少間隔 RATE.gap，
+// 被限速時依序等 backoff、2×backoff… 再重試
+const RATE = { gap: 900, backoff: 2000, retries: 4 };
+let lastAt = 0;
+async function throttle() {
+  const wait = lastAt + RATE.gap + Math.random() * RATE.gap * 0.3 - Date.now();
+  if (wait > 0) await delay(wait);
+  lastAt = Date.now();
+}
+
 async function call(auth, pool, endId, size = 20) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await callOnce(auth, pool, endId, size);
+    } catch (e) {
+      if (!e.rateLimited || attempt >= RATE.retries) throw e;
+      await delay(RATE.backoff * 2 ** attempt);
+    }
+  }
+}
+
+async function callOnce(auth, pool, endId, size) {
+  await throttle();
   const q = new URLSearchParams({
     authkey_ver: auth.authkey_ver, sign_type: auth.sign_type, auth_appid: 'webview_gacha',
     authkey: auth.authkey, lang: auth.lang || 'zh-tw', game_biz: auth.game_biz,
@@ -100,11 +122,15 @@ async function call(auth, pool, endId, size = 20) {
   const j = await r.json();
   if (j.retcode !== 0) {
     const expired = j.retcode === -101 || j.retcode === -100 || /authkey/i.test(j.message || '');
+    const rateLimited = j.retcode === -110 || /too frequently/i.test(j.message || '');
     const detail = `（${ep} gacha_type=${pool.gacha}：${j.retcode} ${j.message || ''}）`;
-    const e = new Error(expired
-      ? (auth.via === 'account' ? `HoYoLAB 產生的躍遷紀錄憑證被拒絕${detail}` : `躍遷紀錄連結已過期，請在遊戲內開啟「躍遷 → 查看詳情 → 紀錄」後，馬上回來按「從遊戲更新」${detail}`)
-      : `星鐵 API 錯誤${detail}`);
-    e.expired = expired;
+    const e = new Error(rateLimited
+      ? `請求太頻繁，被官方暫時限制，請等 1～2 分鐘後再按「從遊戲更新」${detail}`
+      : expired
+        ? (auth.via === 'account' ? `HoYoLAB 產生的躍遷紀錄憑證被拒絕${detail}` : `躍遷紀錄連結已過期，請在遊戲內開啟「躍遷 → 查看詳情 → 紀錄」後，馬上回來按「從遊戲更新」${detail}`)
+        : `星鐵 API 錯誤${detail}`);
+    e.expired = expired && !rateLimited;
+    e.rateLimited = rateLimited;
     throw e;
   }
   return j.data || {};
@@ -117,7 +143,10 @@ async function pickValid(cands) {
     try {
       await call(c, POOLS[4], 0, 1);
       return c;
-    } catch (e) { lastErr = e; }
+    } catch (e) {
+      if (e.rateLimited) throw e; // 限速時換下一個連結也一樣，直接回報
+      lastErr = e;
+    }
   }
   if (lastErr) throw lastErr;
   return null;
@@ -158,8 +187,8 @@ async function fetchRecords(auth, known = new Set(), onProgress) {
       try {
         data = await call(auth, pool, endId);
       } catch (e) {
-        // 聯動池在舊帳號 / 國服可能不存在：只有聯動池失敗時略過
-        if (pool.ld && !e.expired) break;
+        // 聯動池在舊帳號 / 國服可能不存在：只有聯動池失敗時略過（過期、限速照樣回報）
+        if (pool.ld && !e.expired && !e.rateLimited) break;
         throw e;
       }
       const list = data.list || [];
@@ -169,7 +198,6 @@ async function fetchRecords(auth, known = new Set(), onProgress) {
       uid = uid || String(list[0].uid || '');
       if (fresh.length < list.length) break;
       endId = list[list.length - 1].id;
-      await delay(300 + Math.random() * 200);
     }
   }
   return { records: out, uid, region: auth.region };
@@ -178,7 +206,7 @@ async function fetchRecords(auth, known = new Set(), onProgress) {
 /** 用每個池 1 筆的請求找出 uid（沒有任何紀錄就回傳空字串） */
 async function probeUid(auth) {
   for (const pool of POOLS) {
-    const data = await call(auth, pool, 0, 1).catch((e) => { if (pool.ld && !e.expired) return {}; throw e; });
+    const data = await call(auth, pool, 0, 1).catch((e) => { if (pool.ld && !e.expired && !e.rateLimited) return {}; throw e; });
     if (data.list?.length) return String(data.list[0].uid || '');
   }
   return '';
@@ -188,4 +216,4 @@ function rulesFor() {
   return Object.fromEntries(POOLS.map((p) => [p.key, { label: p.label, order: p.order, pityMax: p.pityMax }]));
 }
 
-module.exports = { POOLS, OFFICIAL_PAGE, findGameDataDirs, parseAuthUrl, findFromCache, pickValid, probeUid, fetchRecords, rulesFor, norm };
+module.exports = { POOLS, OFFICIAL_PAGE, RATE, findGameDataDirs, parseAuthUrl, findFromCache, pickValid, probeUid, fetchRecords, rulesFor, norm };

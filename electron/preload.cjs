@@ -71,4 +71,10 @@ contextBridge.exposeInMainWorld('modhub', {
   nexusClearKey: () => ipcRenderer.invoke('nexus:clearKey'),
   nxmRegister: () => ipcRenderer.invoke('nxm:register'),
   nxmUnregister: () => ipcRenderer.invoke('nxm:unregister'),
+  updateState: () => ipcRenderer.invoke('update:state'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateDownload: () => ipcRenderer.invoke('update:download'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
+  updateOpenReleases: () => ipcRenderer.invoke('update:openReleases'),
+  onUpdateStatus: on('update:status'),
 });
