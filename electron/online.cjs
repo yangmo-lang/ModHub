@@ -9,7 +9,7 @@ const net = require('./net.cjs');
 const installer = require('./installer.cjs');
 const scanner = require('./scanner.cjs');
 
-const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com)\//i;
+const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com|(hsr|ww|zzz)\.nanoka\.cc|wiki\.skland\.com|www\.skland\.com)\//i;
 
 function register(ipcMain, ctx) {
   // ctx: { getSettings, saveSettings, modsDirFor(gameId), matcherFor(gameId), toTw }

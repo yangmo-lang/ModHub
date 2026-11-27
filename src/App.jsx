@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Online from './Online.jsx';
+import Codex from './Codex.jsx';
+import Planner from './Planner.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 
 const api = window.modhub;
@@ -61,7 +63,8 @@ export default function App() {
   const [sort, setSort] = useState('release');
   const [facet, setFacet] = useState({ element: '', role: '', rarity: '', hasMods: false });
   const [picker, setPicker] = useState(null); // { mode: 'map', category } | { mode: 'move', mod }
-  const [view, setView] = useState('local'); // 'local' | 'online'
+  const [view, setView] = useState('local'); // 'local' | 'online' | 'codex'
+  const [onlineSeed, setOnlineSeed] = useState(null); // 從圖鑑「找 MOD」帶過去的搜尋字
   const [jobs, setJobs] = useState([]);
   const [installing, setInstalling] = useState(null); // job
   const [dragOver, setDragOver] = useState(false);
@@ -292,7 +295,7 @@ export default function App() {
 
   return (
     <div
-      className={`app ${dragOver ? 'drag' : ''}`}
+      className={`app ${dragOver ? 'drag' : ''} ${view === 'planner' ? 'no-cats' : ''}`}
       onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target || !e.relatedTarget) setDragOver(false); }}
       onDrop={onDrop}
@@ -384,11 +387,23 @@ export default function App() {
         <div className="viewtabs">
           <button className={view === 'local' ? 'active' : ''} onClick={() => setView('local')}>本機 MOD</button>
           <button className={view === 'online' ? 'active' : ''} onClick={() => setView('online')}>線上下載</button>
+          <button className={view === 'codex' ? 'active' : ''} onClick={() => setView('codex')}>圖鑑 / 前瞻</button>
+          <button className={view === 'planner' ? 'active' : ''} onClick={() => setView('planner')}>養成計算</button>
           <div className="spacer" />
           <button className="btn small" onClick={async () => { const r = await api.pickArchives(gameId); if (r.length) showToast(`準備安裝 ${r.length} 個壓縮檔`); }}>📦 從壓縮檔安裝</button>
         </div>
-        {view === 'online' ? (
-          <Online gameId={gameId} characters={data.allCharacters || []} showAdult={showAdult} setShowAdult={setShowAdult} showToast={showToast} />
+        {view === 'planner' ? (
+          <Planner gameId={gameId} gameName={game?.name || ''} showToast={showToast} />
+        ) : view === 'codex' ? (
+          <Codex
+            gameId={gameId}
+            gameName={game?.name || ''}
+            categories={data.categories}
+            onShowLocal={(name) => { setView('local'); setCategory(name); }}
+            onFindMods={(term) => { setOnlineSeed({ term, n: Date.now() }); setView('online'); }}
+          />
+        ) : view === 'online' ? (
+          <Online gameId={gameId} characters={data.allCharacters || []} showAdult={showAdult} setShowAdult={setShowAdult} showToast={showToast} seed={onlineSeed} />
         ) : (
         <>
         <header className="toolbar">

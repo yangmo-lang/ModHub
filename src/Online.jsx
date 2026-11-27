@@ -7,7 +7,7 @@ const fmtDate = (t) => (t ? new Date(t).toLocaleDateString() : '');
 const SOURCES = [['gamebanana', 'GameBanana'], ['nexus', 'Nexus Mods']];
 const SORTS = [['new', '最新上傳'], ['updated', '最近更新'], ['popular', '熱門']];
 
-export default function Online({ gameId, characters, showAdult, setShowAdult, showToast }) {
+export default function Online({ gameId, characters, showAdult, setShowAdult, showToast, seed }) {
   const [source, setSource] = useState('gamebanana');
   const [sort, setSort] = useState('new');
   const [search, setSearch] = useState('');
@@ -39,7 +39,11 @@ export default function Online({ gameId, characters, showAdult, setShowAdult, sh
   }, [gameId, source, sort, query]);
 
   useEffect(() => { load(1, false); }, [load]);
-  useEffect(() => { setSearch(''); setQuery(''); setCharId(''); }, [gameId]);
+  useEffect(() => {
+    // 從圖鑑「找 MOD」過來：直接帶入搜尋字
+    if (seed && Date.now() - seed.n < 3000) { setSearch(seed.term); setQuery(seed.term); setCharId(''); return; }
+    setSearch(''); setQuery(''); setCharId('');
+  }, [gameId, seed]);
 
   const pickChar = (id) => {
     setCharId(id);

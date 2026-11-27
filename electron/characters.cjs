@@ -371,6 +371,7 @@ function guessCharacter(index, folderName) {
 }
 
 module.exports = {
+  META,
   SOURCES,
   NANOKA_GAME,
   toTw,

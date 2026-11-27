@@ -22,6 +22,20 @@ contextBridge.exposeInMainWorld('modhub', {
   moveToCategory: (gameId, modPath, target) => ipcRenderer.invoke('mods:moveToCategory', gameId, modPath, target),
   onCharProgress: on('chars:progress'),
 
+  // 圖鑑 / 前瞻
+  codexGet: (gameId, force) => ipcRenderer.invoke('codex:get', gameId, force),
+  codexDetail: (gameId, kind, id) => ipcRenderer.invoke('codex:detail', gameId, kind, id),
+
+  // 養成計算機
+  plannerEntities: (gameId) => ipcRenderer.invoke('planner:entities', gameId),
+  plannerModel: (gameId, kind, id) => ipcRenderer.invoke('planner:model', gameId, kind, id),
+  plannerDefault: (gameId, kind, id) => ipcRenderer.invoke('planner:default', gameId, kind, id),
+  plannerGet: (gameId) => ipcRenderer.invoke('planner:get', gameId),
+  plannerSave: (gameId, plan) => ipcRenderer.invoke('planner:save', gameId, plan),
+  plannerCalc: (gameId, plan) => ipcRenderer.invoke('planner:calc', gameId, plan),
+  plannerRefresh: (gameId) => ipcRenderer.invoke('planner:refresh', gameId),
+  onPlannerProgress: on('planner:progress'),
+
   // 線上
   onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),
   onlineDetails: (gameId, source, modId) => ipcRenderer.invoke('online:details', gameId, source, modId),

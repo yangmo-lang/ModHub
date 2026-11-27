@@ -29,6 +29,8 @@ function getChars(gameId) {
 }
 
 const online = require('./online.cjs');
+const codex = require('./codex.cjs');
+const planner = require('./planner/index.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -147,6 +149,30 @@ app.whenReady().then(() => {
     };
     return { c, byId, matchCharacter, guessCharacter: (name) => chars.guessCharacter(c.index, name) };
   }
+
+  // ---- 圖鑑 / 前瞻 ----
+  ipcMain.handle('codex:get', (_e, gameId, force) => {
+    gameById(gameId);
+    return codex.getCodex(app.getPath('userData'), gameId, { force: Boolean(force), loadWiki: () => skland.loadWiki({ maxAgeMs: force ? 0 : undefined }), DETAIL: skland.DETAIL });
+  });
+  const detailCache = new Map();
+  ipcMain.handle('codex:detail', async (_e, gameId, kind, id) => {
+    const key = `${gameId}:${kind}:${id}`;
+    if (!detailCache.has(key)) {
+      const c = await codex.getCodex(app.getPath('userData'), gameId, { loadWiki: () => skland.loadWiki(), DETAIL: skland.DETAIL });
+      if (!c.versions) return null; // 終末地的說明已在清單資料裡
+      detailCache.set(key, await codex.nanokaDetail(gameId, kind, id, c.versions.latest));
+    }
+    return detailCache.get(key);
+  });
+
+  // ---- 養成計算機 ----
+  planner.register(ipcMain, {
+    userData: () => app.getPath('userData'),
+    getCodex: (gameId) => codex.getCodex(app.getPath('userData'), gameId, { loadWiki: () => skland.loadWiki(), DETAIL: skland.DETAIL }),
+    loadWiki: () => skland.loadWiki(),
+    emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
+  });
 
   const onlineApi = online.register(ipcMain, {
     getSettings: () => settings,
