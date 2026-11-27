@@ -62,10 +62,18 @@ function gameById(id) {
   return g;
 }
 
+// XXMI Launcher 內建的遊戲 logo 圖塊（只讀這個資料夾）
+const tilesDir = () => path.join(settings.xxmiRoot, 'Themes', 'Default', 'MainWindow', 'LauncherFrame');
+function gameLogo(gameId) {
+  const f = path.join(tilesDir(), `game-tile-${gameId.toLowerCase()}.png`);
+  return fs.existsSync(f) ? f : null;
+}
+
 function allModsRoots() {
   return [
     ...config.GAMES.map((g) => config.modsDirFor(settings, g.id)),
     path.join(app.getPath('userData'), 'characters'),
+    tilesDir(),
   ];
 }
 
@@ -119,6 +127,7 @@ app.whenReady().then(() => {
       ...g,
       modsDir: config.modsDirFor(settings, g.id),
       available: fs.existsSync(config.modsDirFor(settings, g.id)),
+      logo: gameLogo(g.id),
     })),
   }));
 

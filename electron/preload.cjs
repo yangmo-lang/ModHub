@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('modhub', {
   plannerSave: (gameId, plan) => ipcRenderer.invoke('planner:save', gameId, plan),
   plannerCalc: (gameId, plan) => ipcRenderer.invoke('planner:calc', gameId, plan),
   plannerRefresh: (gameId) => ipcRenderer.invoke('planner:refresh', gameId),
+  plannerHoyoSync: (gameId, plan) => ipcRenderer.invoke('planner:hoyoSync', gameId, plan),
   onPlannerProgress: on('planner:progress'),
 
   // 抽卡紀錄

@@ -94,10 +94,11 @@ async function hgU8Token(provider, uid, oauth) {
 
 // ---------------- HoYoLAB：登入 cookie → 角色 → 產生調頻紀錄 authkey ----------------
 
-async function hoyoRoles() {
+/** HoYoLAB 帳號底下某個遊戲的角色（gameBiz：nap_global 絕區零、hkrpg_global 星鐵） */
+async function hoyoRoles(gameBiz = 'nap_global') {
   for (const base of PROVIDERS.hoyolab.bindingBases) {
     try {
-      const j = await sfetchJson('hoyolab', `${base}/account/binding/api/getUserGameRolesByCookieToken?game_biz=nap_global`);
+      const j = await sfetchJson('hoyolab', `${base}/account/binding/api/getUserGameRolesByCookieToken?game_biz=${gameBiz}`);
       if (j.retcode === 0) {
         return (j.data?.list || []).map((r) => ({ uid: String(r.game_uid), name: r.nickname || '', region: r.region, server: r.region_name || r.region, level: r.level, base }));
       }
@@ -208,4 +209,9 @@ async function logout(provider) {
   return true;
 }
 
-module.exports = { PROVIDERS, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial };
+/** 用 HoYoLAB 登入分區送出請求（給其他模組用，例如養成同步） */
+function hoyoFetchJson(url, init) {
+  return sfetchJson('hoyolab', url, { ...init, headers: { 'x-rpc-language': 'zh-tw', ...(init?.headers || {}) } });
+}
+
+module.exports = { PROVIDERS, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };

@@ -113,6 +113,36 @@ export default function Planner({ gameId, gameName, showToast }) {
   };
   const setInventory = (id, n) => setPlan((p) => ({ ...p, inventory: { ...p.inventory, [id]: Math.max(0, Number(n) || 0) } }));
 
+  // 從 HoYoLAB 同步目前進度（星鐵 / 絕區零）與背包（星鐵）
+  const canHoyo = gameId === 'SRMI' || gameId === 'ZZMI';
+  const [syncing, setSyncing] = useState(false);
+  const hoyoSync = async () => {
+    if (!plan.entries.length) { showToast('先加入要養成的角色或武器，再同步', 'error'); return; }
+    setSyncing(true);
+    try {
+      const r = await api.plannerHoyoSync(gameId, plan);
+      const byKey = new Map(r.results.filter((x) => x.status === 'ok').map((x) => [x.key, x.cfg]));
+      setPlan((p) => ({
+        ...p,
+        entries: p.entries.map((e) => (byKey.has(e.key) ? { ...e, cur: byKey.get(e.key).cur, tgt: byKey.get(e.key).tgt } : e)),
+        inventory: { ...p.inventory, ...r.inventory },
+      }));
+      const notOwned = r.results.filter((x) => x.status === 'not-owned').length;
+      const unknown = r.results.filter((x) => x.status === 'unknown').length;
+      const inv = Object.keys(r.inventory).length;
+      showToast([
+        `已同步 ${byKey.size} 個目標的目前進度`,
+        inv ? `背包 ${inv} 種材料` : gameId === 'ZZMI' ? '（絕區零沒有提供背包資料）' : '',
+        notOwned ? `${notOwned} 個尚未擁有` : '',
+        unknown ? `${unknown} 個查不到（未裝備的武器）` : '',
+      ].filter(Boolean).join('，'));
+    } catch (e) {
+      showToast(`同步失敗：${errText(e)}`, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const entityMap = useMemo(() => new Map((entities || []).map((e) => [`${e.kind}:${e.id}`, e])), [entities]);
   const sel = plan.entries.find((e) => e.key === selected) || null;
   const selModel = sel ? models[`${sel.kind}:${sel.id}`] : null;
@@ -129,6 +159,15 @@ export default function Planner({ gameId, gameName, showToast }) {
             <button className="btn small" disabled={!entities} onClick={() => setPicker('weapon')}>＋ {WEAPON_LABEL[gameId]}</button>
           </div>
         </div>
+        {canHoyo && (
+          <div className="pl-sync">
+            <button className="btn small" disabled={syncing || !plan.entries.length} onClick={hoyoSync}
+              title={gameId === 'SRMI' ? '從 HoYoLAB 讀取目前等級、技能、行跡，以及背包裡相關材料的數量' : '從 HoYoLAB 戰績讀取目前等級、技能與音擎等級'}>
+              {syncing ? '同步中…' : '↻ 從 HoYoLAB 同步'}
+            </button>
+            <small>{gameId === 'SRMI' ? '進度＋背包' : '進度（無背包）'}</small>
+          </div>
+        )}
         {entErr && <div className="error-text pad">{entErr}</div>}
         {!entities && !entErr && <div className="card-meta pad">{progress ? `下載遊戲資料 ${progress.done}/${progress.total}（${progress.table || ''}）…` : `讀取${gameName}資料中…`}</div>}
         {loaded && !plan.entries.length && <div className="card-meta pad">還沒有目標。按上面的按鈕加入角色或{WEAPON_LABEL[gameId]}，預設會算到全滿。</div>}

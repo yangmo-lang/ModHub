@@ -16,7 +16,7 @@ test('終末地：每期卡池、加急尋訪、歪、已墊（帶到下一期�
   for (let i = 0; i < 65; i++) recs.push(r('B', 'low', 'x'));
   recs.push(r('B', 'top', '祀'));                      // 5 + 66 = 71 抽，常駐角色 → 歪
   recs.push(r('standard', 'top', '祀', { pool: 'char:E_CharacterGachaPoolType_Standard' }));
-  const out = v.buildEndfield(recs, { A: { up6: '萊萬汀' }, B: { up6: '小刻', up6Avatar: 'up.png' } }, {});
+  const out = v.buildEndfield(recs, { A: { up6: '萊萬汀' }, B: { up6: '小刻', up6Avatar: 'strip.png' } }, { 小刻: 'square.png', 祀: 'si.png' });
   const g = out.groups.find((x) => x.key === SP);
   assert.deepEqual(g.banners.map((b) => b.id), ['B', 'A'], '新的在前');
   const [B, A] = g.banners;
@@ -28,7 +28,8 @@ test('終末地：每期卡池、加急尋訪、歪、已墊（帶到下一期�
   assert.deepEqual(B.entries.find((e) => e.type === 'free'), { type: 'free', count: 10, time: 25000 });
   assert.equal(B.pulls, 76);
   assert.equal(B.free, 10);
-  assert.equal(B.upIcon, 'up.png');
+  assert.equal(B.upIcon, 'square.png', 'UP 頭像用方形角色圖，不用官方橫長名牌圖');
+  assert.equal(hits[0].icon, 'si.png');
   assert.equal(g.pityNow, 0);
   assert.deepEqual(g.bigPity, { paid: 66, max: 120, remaining: 54, gotUp: false, name: 'B' });
   assert.equal(out.totals.upWin, 0.5);

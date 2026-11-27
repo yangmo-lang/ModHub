@@ -306,9 +306,11 @@ export default function App() {
         <div className="brand">Mod<span>Hub</span></div>
         {state.games.map((g) => (
           <button key={g.id} className={`game ${g.id === gameId ? 'active' : ''} ${g.available ? '' : 'missing'}`}
-            onClick={() => setGameId(g.id)} title={g.available ? g.modsDir : `找不到 ${g.modsDir}`}>
-            <span className="game-badge">{g.short}</span>
-            <span className="game-id">{g.id}</span>
+            onClick={() => setGameId(g.id)} title={`${g.name}${g.available ? '' : `（找不到 ${g.modsDir}）`}`}>
+            {g.logo
+              ? <img className="game-logo" src={img(g.logo)} alt={g.name} draggable="false" />
+              : <span className="game-badge">{g.short}</span>}
+            <span className="game-id">{g.short}</span>
           </button>
         ))}
         <div className="spacer" />

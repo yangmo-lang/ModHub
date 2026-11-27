@@ -86,7 +86,8 @@ function buildEndfield(records, poolInfo = {}, icons = {}) {
         }
         if (isUp !== null && !r.free) { upKnown++; if (isUp) upWins++; }
         if (isUp) b.gotUp = true;
-        b.entries.push({ type: 'top', name: r.name, icon: (isUp && info?.up6Avatar) || iconOf(icons, r.name), pity: r.free ? 0 : pity.get(pk) || 0, isUp, free: Boolean(r.free), time: r.time, nth: b.pulls, rarity: r.rarity });
+        // 頭像一律用方形角色圖（官方 up6_avatar 是橫長的名牌圖，不能當頭像）
+        b.entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity: r.free ? 0 : pity.get(pk) || 0, isUp, free: Boolean(r.free), time: r.time, nth: b.pulls, rarity: r.rarity });
         if (!r.free) pity.set(pk, 0);
       }
       b.pityAfter = pity.get(pk) || 0;
@@ -97,7 +98,7 @@ function buildEndfield(records, poolInfo = {}, icons = {}) {
       b.pad = b.pityAfter || 0;
       const info = poolInfo[b.id];
       b.upName = info?.up6 || null;
-      b.upIcon = info?.up6Avatar || iconOf(icons, info?.up6);
+      b.upIcon = iconOf(icons, info?.up6);
       if (info?.name) b.name = info.name;
       b.entries = b.entries.reverse();
       b.tops = summarizeTops(b.entries);

@@ -150,6 +150,25 @@ function register(ipcMain, ctx) {
       notes: [...new Set(list.flatMap((x) => x.model.notes || []))],
     };
   });
+  // 從 HoYoLAB 同步目前進度（星鐵、絕區零）與背包（星鐵）；不修改存檔，回傳結果讓介面套用
+  ipcMain.handle('planner:hoyoSync', async (_e, gameId, plan) => {
+    const login = require('../gacha/login.cjs');
+    const hoyosync = require('./hoyosync.cjs');
+    const biz = gameId === 'SRMI' ? 'hkrpg_global' : gameId === 'ZZMI' ? 'nap_global' : null;
+    if (!biz) throw new Error('這個遊戲沒有 HoYoLAB 同步');
+    const roles = await login.hoyoRoles(biz);
+    if (!roles) throw new Error('HoYoLAB 尚未登入：請到「抽卡紀錄」的「官方帳號」登入 HoYoLAB');
+    if (!roles.length) throw new Error(`這個 HoYoLAB 帳號沒有綁定${gameId === 'SRMI' ? '星鐵' : '絕區零'}角色`);
+    const args = {
+      roles,
+      fetchJson: login.hoyoFetchJson,
+      entries: plan.entries || [],
+      modelOf: (e) => model(gameId, e.kind, e.id),
+      onProgress: (stage) => ctx.emit('planner:progress', { gameId, stage, done: 0, total: 1 }),
+    };
+    return gameId === 'SRMI' ? hoyosync.hsrSync(args) : hoyosync.zzzSync(args);
+  });
+
   ipcMain.handle('planner:refresh', async (_e, gameId) => {
     models.clear();
     catalogs.delete(gameId);

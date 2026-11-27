@@ -67,6 +67,11 @@ npm test         # 掃描/切換邏輯單元測試
   - 經驗曲線與經驗道具數值：`electron/planner/exp-constants.json`（由星鐵 / 鳴潮公開遊戲設定表與絕區零道具說明整理）
 - 參考 CEP 終末地規劃器（end.canmoe.com）的功能設計；CEP 為 AGPL-3.0，ModHub 沒有複製其程式或資料
 - 已知限制：星鐵、鳴潮、絕區零角色升級時消耗的貨幣未計入（遊戲資料未提供）
+- **從 HoYoLAB 同步**（需先在「抽卡紀錄 → 官方帳號」登入 HoYoLAB）
+  - 星鐵：HoYoLAB 遊戲工具 `event/rpgcultivate`（`avatar/list`、`calc/avatar/detail`、`calc/compute`）
+    → 等級、技能、已點亮行跡、裝備光錐等級；**背包**：`calc/compute` 回傳的 `user_owns_materials`（相關材料的實際持有數）
+  - 絕區零：HoYoLAB 戰績 `game_record_zzz`（`avatar/basic`、`avatar/info`）→ 等級、技能（含核心技）、裝備音擎等級；國際服沒有背包資料
+  - 突破階段依等級推算最低值（官方沒提供）；同步只更新「目前」，原本的目標保留（低於目前時拉高）
 
 ### 抽卡紀錄（終末地 / 絕區零）
 
