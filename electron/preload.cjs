@@ -36,6 +36,16 @@ contextBridge.exposeInMainWorld('modhub', {
   plannerRefresh: (gameId) => ipcRenderer.invoke('planner:refresh', gameId),
   onPlannerProgress: on('planner:progress'),
 
+  // 抽卡紀錄
+  gachaSupported: () => ipcRenderer.invoke('gacha:supported'),
+  gachaAccounts: (gameId) => ipcRenderer.invoke('gacha:accounts', gameId),
+  gachaGet: (gameId, accountId) => ipcRenderer.invoke('gacha:get', gameId, accountId),
+  gachaUpdate: (gameId, opts) => ipcRenderer.invoke('gacha:update', gameId, opts),
+  gachaExport: (gameId, accountId) => ipcRenderer.invoke('gacha:export', gameId, accountId),
+  gachaImport: (gameId) => ipcRenderer.invoke('gacha:import', gameId),
+  gachaOfficial: (gameId) => ipcRenderer.invoke('gacha:official', gameId),
+  onGachaProgress: on('gacha:progress'),
+
   // 線上
   onlineList: (gameId, source, opts) => ipcRenderer.invoke('online:list', gameId, source, opts),
   onlineDetails: (gameId, source, modId) => ipcRenderer.invoke('online:details', gameId, source, modId),

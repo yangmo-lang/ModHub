@@ -68,6 +68,19 @@ npm test         # 掃描/切換邏輯單元測試
 - 參考 CEP 終末地規劃器（end.canmoe.com）的功能設計；CEP 為 AGPL-3.0，ModHub 沒有複製其程式或資料
 - 已知限制：星鐵、鳴潮、絕區零角色升級時消耗的貨幣未計入（遊戲資料未提供）
 
+### 抽卡紀錄（終末地 / 絕區零）
+
+- 「抽卡紀錄」分頁：在遊戲內開啟紀錄頁面後按「↻ 從遊戲更新」，或「貼上網址」
+  - 終末地：讀 `%USERPROFILE%\AppData\LocalLow\{Gryphline|Hypergryph}\Endfield\sdklogs\HGWebview.log` 裡最新的
+    `ef-webview…/page/gacha_*?u8_token=…` 網址，呼叫 `/api/record/char`、`/api/record/weapon`（做法參考 bhaoo/endfield-gacha，MIT）
+  - 絕區零：讀遊戲 `ZenlessZoneZero_Data\webCaches\<版本>\Cache\Cache_Data\data_2` 裡 `auth_appid=webview_gacha` 的 authkey，
+    呼叫官方 `getGachaLog`；另有按鈕開啟 HoYoLAB 官方調頻紀錄頁
+- token / authkey 只在記憶體中使用，不寫入檔案；連結有效時間很短，開完紀錄頁要馬上更新
+- 紀錄存在 `%APPDATA%\modhub\gacha\<遊戲>\<帳號>.json`，之後只下載新紀錄；可匯出 / 匯入 JSON
+- 統計：各池總抽數、距上次最高稀有度、限定池本期大保底（終末地 120 / 武器 80）、各稀有度數量、平均出貨抽數、出貨歷史
+  - 終末地的免費抽（加急招募）不累計保底，免費抽出的 6★ 也不重置保底；`gift_*` 獎勵不算抽數
+- 尚未支援：UIGF 標準格式匯入匯出、UP / 歪的判定
+
 ### 線上下載（GameBanana / Nexus Mods）
 
 - 「線上下載」分頁：最新 / 最近更新 / 熱門、關鍵字或依角色搜尋，預設隱藏成人內容

@@ -31,6 +31,7 @@ function getChars(gameId) {
 const online = require('./online.cjs');
 const codex = require('./codex.cjs');
 const planner = require('./planner/index.cjs');
+const gacha = require('./gacha/index.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -171,6 +172,13 @@ app.whenReady().then(() => {
     userData: () => app.getPath('userData'),
     getCodex: (gameId) => codex.getCodex(app.getPath('userData'), gameId, { loadWiki: () => skland.loadWiki(), DETAIL: skland.DETAIL }),
     loadWiki: () => skland.loadWiki(),
+    emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
+  });
+
+  // ---- 抽卡紀錄 ----
+  gacha.register(ipcMain, {
+    userData: () => app.getPath('userData'),
+    xxmiRoot: () => settings.xxmiRoot,
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
 
