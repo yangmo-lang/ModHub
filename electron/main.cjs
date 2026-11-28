@@ -177,7 +177,7 @@ app.whenReady().then(() => {
   }));
 
   // 介面只能改這些設定；金鑰等由專用 IPC 處理
-  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir', 'odRoot', 'odAfter', 'odInstance', 'odLaunchVia', 'odScheduleEnabled', 'odScheduleTime', 'meRoot', 'meInstance', 'meQuit', 'meLaunchVia', 'meScheduleEnabled', 'meScheduleTime', 'meBypassModCheck']);
+  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir', 'odRoot', 'odAfter', 'odInstance', 'odLaunchVia', 'odScheduleEnabled', 'odScheduleTime', 'meRoot', 'meInstance', 'meQuit', 'meLaunchVia', 'meScheduleEnabled', 'meScheduleTime', 'meBypassModCheck', 'meRegion']);
   ipcMain.handle('settings:save', (_e, patch) => {
     const clean = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => RENDERER_KEYS.has(k)));
     settings = { ...settings, ...clean };
@@ -295,6 +295,7 @@ app.whenReady().then(() => {
     BrowserWindow,
     downloadsDir: () => app.getPath('downloads'),
     launchGame: () => launchXxmi('ZZMI'),
+    xxmiRoot: () => settings.xxmiRoot,
     startElevated,
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });

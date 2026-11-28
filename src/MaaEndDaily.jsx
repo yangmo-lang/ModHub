@@ -3,6 +3,9 @@ import { api, errText } from './common.jsx';
 import ElevatedSettings from './Elevated.jsx';
 import MaaEndTasks from './MaaEndTasks.jsx';
 
+// MaaEnd「啟動遊戲」前置任務的伺服器（名稱與 MaaEnd 的繁中介面相同）
+const REGION_LABEL = { CN: '國服（官方啟動器）', Global: '國際服（官方啟動器）', Bilibili: 'B服', TapTap: 'TapTap', Steam: 'Steam', Epic: 'Epic' };
+
 const STAGE = { launching: '透過 XXMI 開遊戲…', waiting: '等遊戲開好…', maaend: '啟動 MaaEnd…' };
 
 /** 主畫面「終末地 → 自動每日」：第三方工具 MaaEnd 的資料夾、要執行的實例、定時；任務清單只讀（在 MaaEnd 裡設定） */
@@ -86,6 +89,22 @@ export default function MaaEndDaily({ showToast }) {
                 </select>
               </label>
               <label className="check"><input type="checkbox" checked={Boolean(st.meQuit)} onChange={(e) => save({ meQuit: e.target.checked })} />跑完關閉 MaaEnd</label>
+            </div>
+          )}
+          {st.found && st.meLaunchVia === 'maaend' && st.launch && (
+            <div className="row">
+              <label className="inline">伺服器
+                <select className="sel" value={st.meRegion || ''} onChange={(e) => save({ meRegion: e.target.value })}>
+                  <option value="">自動{st.launch.guess ? `（判斷為 ${REGION_LABEL[st.launch.guess]}）` : st.launch.pretask?.region ? `（沿用 MaaEnd：${REGION_LABEL[st.launch.pretask.region] || st.launch.pretask.region}）` : '（判斷不出來）'}</option>
+                  {Object.entries(REGION_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </label>
+              <span className="card-meta">
+                執行時 ModHub 會打開「{st.instance}」的「啟動遊戲」前置任務，伺服器設為 {REGION_LABEL[st.launch.region] || '（不變）'}
+                {st.launch.pretask && (!st.launch.pretask.enabled || (st.launch.region && st.launch.pretask.region !== st.launch.region))
+                  ? `（目前 MaaEnd 裡是${st.launch.pretask.enabled ? '' : '關閉、'}${REGION_LABEL[st.launch.pretask.region] || st.launch.pretask.region || '未設定'}）` : ''}
+                。自動判斷依終末地資料夾：{st.launch.gameDir || '（找不到，請到「設定」確認 XXMI 或終末地遊戲資料夾）'}
+              </span>
             </div>
           )}
           <div className="row">

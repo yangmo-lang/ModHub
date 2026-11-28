@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('modhub', {
   onOdStarted: on('od:started'),
   onOdStage: on('od:stage'),
   onOdError: on('od:error'),
+  onOdGamePathFilled: on('od:gamePathFilled'),
   meStatus: () => ipcRenderer.invoke('me:status'),
   meRun: () => ipcRenderer.invoke('me:run'),
   meOpenConfigDir: () => ipcRenderer.invoke('me:openConfigDir'),

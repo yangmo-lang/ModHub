@@ -7,6 +7,7 @@ const od = require('./onedragon.cjs');
 const tasks = require('./onedragon-tasks.cjs');
 const apps = require('./onedragon-apps.cjs');
 const zhtw = require('./onedragon-zhtw.cjs');
+const odGame = require('./onedragon-game.cjs');
 const { parseTasklist } = require('./overlay.cjs');
 const net = require('./net.cjs');
 
@@ -65,10 +66,21 @@ function sha256File(file) {
 function register(ipcMain, ctx) {
   const root = () => od.detect(od.options(ctx.getSettings()).odRoot);
 
+  /** 要檢查遊戲路徑的實例：OneDragon 的實例清單，沒有就用第一個（01） */
+  const instanceIndices = (dir) => {
+    const list = tasks.readInstances(dir).map((i) => i.idx);
+    return list.length ? list : [1];
+  };
+  function gamePathStatus(dir) {
+    if (!dir) return null;
+    const exe = odGame.findGameExe(ctx.xxmiRoot?.() || '');
+    return { exe, instances: odGame.status(dir, instanceIndices(dir)) };
+  }
+
   function status() {
     const o = od.options(ctx.getSettings());
     const found = root();
-    return { ...o, found, exe: found ? od.launcherPath(found) : '', pages: od.PAGES, configuredButMissing: Boolean(o.odRoot && !found), zhtw: found ? zhtw.status(found) : { installed: false } };
+    return { ...o, found, exe: found ? od.launcherPath(found) : '', pages: od.PAGES, configuredButMissing: Boolean(o.odRoot && !found), zhtw: found ? zhtw.status(found) : { installed: false }, gamePath: gamePathStatus(found) };
   }
 
   let busy = false;
@@ -78,6 +90,13 @@ function register(ipcMain, ctx) {
     if (busy) throw new Error('一條龍正在準備中');
     const o = od.options(ctx.getSettings());
     const args = od.launchArgs(o);
+    // 沒打開過 OneDragon 設定的人沒有遊戲路徑，它的「打開遊戲」會失敗：空的才補上（OneDragon 開著時不寫，它會蓋掉）
+    if (!(await oneDragonRunning())) {
+      try {
+        const filled = odGame.fill(dir, instanceIndices(dir), odGame.findGameExe(ctx.xxmiRoot?.() || ''));
+        if (filled.length) ctx.emit('od:gamePathFilled', { instances: filled });
+      } catch { /* 寫不進去就交給 OneDragon 自己提示 */ }
+    }
     busy = true;
     try {
       // 先由 ModHub 透過 XXMI 開遊戲（和「▶ 啟動」相同，Epic 版需要這樣才有啟動參數），遊戲畫面出來後再交給 OneDragon

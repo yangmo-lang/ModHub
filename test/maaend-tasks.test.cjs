@@ -24,6 +24,7 @@ function fixture() {
       { name: 'AdbOnly', label: '安卓', controller: ['ADB'], option: [] },
     ],
     option: {
+      LaunchGamePCRegion: { type: 'select', label: '伺服器', cases: [{ name: 'CN' }, { name: 'Global' }, { name: 'Steam' }, { name: 'Epic' }], default_case: 'CN' },
       Clue: { type: 'switch', label: '$opt.Clue', cases: [{ name: 'Yes', option: ['ClueSend'] }, { name: 'No' }], pipeline_override: { big: 1 } },
       ClueSend: { type: 'input', label: '贈送', inputs: [{ name: 'Max', default: '2', pipeline_type: 'int' }] },
       Grow: { label: '種植', cases: [{ name: 'None', label: '不種' }, { name: 'Any', label: '任意', option: ['Items'] }], default_case: 'None' },
@@ -124,4 +125,38 @@ test('新增 / 移除任務：新任務用預設值、id 不重複；隱藏與�
   d = mt.removeTask(root, 'i1', added.id);
   assert.equal(d.tasks.length, 2);
   assert.throws(() => mt.removeTask(root, 'i1', 'p1'), /找不到/);
+});
+
+test('依遊戲資料夾判斷伺服器', () => {
+  assert.equal(me.guessRegion('C:/Program Files/Epic Games/ArknightsEndfieldgowoU/games/EndField Game'), 'Epic');
+  assert.equal(me.guessRegion('D:/SteamLibrary/steamapps/common/Endfield'), 'Steam');
+  assert.equal(me.guessRegion('C:/Program Files/GRYPHLINK/games/Endfield Game'), 'Global');
+  assert.equal(me.guessRegion('C:/Program Files/Hypergryph Launcher/games/Endfield Game'), 'CN');
+  assert.equal(me.guessRegion('E:/Games/Endfield'), '');
+  assert.equal(me.guessRegion(''), '');
+});
+
+test('交給 MaaEnd 開遊戲：打開「啟動遊戲」前置任務並設定伺服器；已經對了就不寫檔', () => {
+  const root = fixture();
+  const file = me.configFile(root);
+  assert.deepEqual(mt.readLaunchPretask(root, 'i1'), { exists: true, enabled: false, region: '' });
+  assert.equal(mt.ensureLaunchPretask(root, 'i1', 'Epic'), true);
+  assert.deepEqual(mt.readLaunchPretask(root, 'i1'), { exists: true, enabled: true, region: 'Epic' });
+  const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual(cfg.instances[0].tasks[0].enabledByController, { 'Win32-Front': true });
+  assert.equal(cfg.instances[0].tasks[0].id, 'p1', '原本的前置任務原地修改');
+  const mtime = fs.statSync(file).mtimeMs;
+  assert.equal(mt.ensureLaunchPretask(root, 'i1', 'Epic'), false);
+  assert.equal(mt.ensureLaunchPretask(root, 'i1', ''), false, '沒指定伺服器時只確保打開');
+  assert.equal(fs.statSync(file).mtimeMs, mtime);
+  assert.throws(() => mt.ensureLaunchPretask(root, 'i1', 'Mars'), /伺服器/);
+  // 沒有前置任務：加在最前面
+  const c2 = JSON.parse(fs.readFileSync(file, 'utf8'));
+  c2.instances[0].tasks = c2.instances[0].tasks.filter((t) => t.taskName !== mt.PRETASK);
+  fs.writeFileSync(file, JSON.stringify(c2));
+  assert.equal(mt.ensureLaunchPretask(root, 'i1', 'Steam'), true);
+  const c3 = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(c3.instances[0].tasks[0].taskName, mt.PRETASK);
+  assert.deepEqual(mt.readLaunchPretask(root, 'i1'), { exists: true, enabled: true, region: 'Steam' });
+  assert.deepEqual(mt.readDetail(root, 'i1').tasks.map((t) => t.id), ['t1', 't2'], '任務清單仍然不顯示前置任務');
 });

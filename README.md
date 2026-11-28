@@ -53,6 +53,9 @@ npm test         # 掃描/切換邏輯單元測試
 - **開遊戲**：預設由 ModHub 先透過 XXMI 開絕區零（和「▶ 啟動」相同、會載入 MOD），偵測到 `ZenlessZoneZero.exe` 後再等 20 秒才啟動 OneDragon，
   OneDragon 看到遊戲已開就不會自己執行 exe。Epic 版直接執行 exe 會缺少 Epic 啟動參數（`epic_check_launch_param: launch param not exists`）
   而在載入時自行結束，所以需要這樣做；也可選「交給 OneDragon 開」
+- **遊戲路徑**（`electron/onedragon-game.cjs`）：OneDragon 不會自己找遊戲，`config\<實例>\game_account.yml` 的 `game_path` 沒設定時「打開遊戲」會失敗。
+  ModHub 從 XXMI 設定的絕區零資料夾（或遊戲的 `Player.log`）找到 `ZenlessZoneZero.exe`，每次執行一條龍前替 `game_path` 是空的實例補上這一行
+  （這個檔案也存帳號密碼：只改這一行、其他內容原樣保留、不讀出也不顯示；已設定的路徑不覆蓋；OneDragon 開著時不寫）。「自動每日」顯示各實例的路徑狀態
 - **任務設定**（任務旁的 ⚙，`electron/onedragon-apps.cjs`，寫 `config\<idx>\one_dragon\<app_id>.yml`）：
   每日簽到選簽到地點（吼吼餅鋪 / 卦象集錄 / 刮刮卡，讀自 `daily_signin_setting_flyout.py`）；錄像店營業、咖啡店選傳送地點（選項讀自安裝目錄 `*_config.py` 的 `TransportPoint`）；
   體力刷本新增 / 刪除 / 排序副本計畫與次數（選項讀自 `assets\game_data\compendium_data.yml` 的「训练」分頁：实战模拟室、区域巡防、专业挑战室、恶名狩猎），
@@ -97,6 +100,10 @@ npm test         # 掃描/切換邏輯單元測試
   看不到（例如 Advanced HUD Control 的 `$hide_uid`）就跳提示並中止。勾選後把這個節點的 `next` 從 `[…Success, …FailedFinish]` 改成 `[…Success, EmptyNode]`
   （MaaEnd 自己的空節點，與它的 Windows 浮水印檢查相同寫法），檢查不通過也繼續；只改 `resource*\pipeline\nodes.json` 這一行，
   第一次備份 `nodes.json.modhub-bak`，取消勾選精確改回；格式和預期不同時不改。同樣每次執行前重新套用
+- **交給 MaaEnd 開遊戲**時：MaaEnd 的「啟動遊戲（PC）」前置任務（`__MXU_PRETASK__LaunchGamePC`，會自己從登錄檔找官方啟動器、Epic 版用 Epic 連結，不需要路徑）
+  必須打開且伺服器正確（預設國服）。這個前置任務在 ModHub 的任務清單不顯示，所以執行前 ModHub 自動打開它並設定伺服器 `LaunchGamePCRegion`：
+  手動指定 → 依終末地資料夾判斷（`Epic Games` → Epic、`steamapps` → Steam、Gryphline / GRYPHLINK → 國際服、Hypergryph → 國服、bilibili / TapTap）→ 沿用 MaaEnd 原本的設定；
+  已經是想要的設定就不寫檔。預設的「ModHub 先透過 XXMI 開」時 MaaEnd 用視窗名稱抓已開的遊戲，不需要這些
 - **開遊戲**：預設由 ModHub 先透過 XXMI 開終末地（載入 MOD），偵測到 `Endfield.exe` 後等 20 秒再啟動 MaaEnd；也可交給 MaaEnd 的「啟動遊戲」
 - MaaEnd 的 Win32 控制器需要系統管理員權限，ModHub 以 `runas` 啟動（跳 UAC），或用下面的「免確認啟動」
 - MaaEnd 只允許開一個，已經開著時再啟動只會叫出舊視窗、不會自動執行，所以 ModHub 會先檢查並提示關閉

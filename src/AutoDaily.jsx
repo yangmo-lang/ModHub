@@ -67,6 +67,19 @@ export function OneDragonSettings() {
         <input type="time" className="od-time" value={st.odScheduleTime} disabled={!st.odScheduleEnabled} onChange={(e) => save({ odScheduleTime: e.target.value })} />
         <span className="card-meta">ModHub 開著時（含縮在系統匣）到時間啟動一次；超過 30 分鐘才打開 ModHub 就不補跑{st.odLastRunDate ? ` · 上次執行 ${st.odLastRunDate}` : ''}</span>
       </div>
+      {st.found && st.gamePath && (() => {
+        const missing = st.gamePath.instances.filter((i) => !i.path);
+        return (
+          <div className="row od-zhtw">
+            <b>遊戲路徑</b>
+            {missing.length === 0
+              ? <span className="card-meta">✓ {[...new Set(st.gamePath.instances.map((i) => i.path))].join('、')}</span>
+              : st.gamePath.exe
+                ? <span className="card-meta">OneDragon 還沒設定遊戲路徑（實例 {missing.map((i) => i.idx).join('、')}）；執行一條龍前 ModHub 會自動填入 {st.gamePath.exe}</span>
+                : <span className="error-text">OneDragon 還沒設定遊戲路徑，ModHub 也找不到 ZenlessZoneZero.exe（請到「設定」確認 XXMI 資料夾，或在 OneDragon 的「帳戶管理 → 遊戲路徑」設定）</span>}
+          </div>
+        );
+      })()}
       {st.found && (
         <div className="row od-zhtw">
           <b>繁體中文遊戲畫面</b>

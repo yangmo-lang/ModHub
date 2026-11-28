@@ -280,4 +280,37 @@ function removeTask(root, instanceId, taskId) {
   });
 }
 
-module.exports = { isHidden, defaultValue, activeCases, initValues, reachable, loadInterface, readDetail, setTasks, setOption, addTask, removeTask, cleanValue };
+const PRETASK = '__MXU_PRETASK__LaunchGamePC';
+
+/** 實例的「啟動遊戲（PC）」前置任務狀態 { exists, enabled, region } */
+function readLaunchPretask(root, instanceId) {
+  const inst = findInstance(readConfig(root), instanceId);
+  const t = (inst.tasks || []).find((x) => x && x.taskName === PRETASK);
+  if (!t) return { exists: false, enabled: false, region: '' };
+  const v = t.optionValues?.LaunchGamePCRegion;
+  return { exists: true, enabled: isEnabled(inst, t), region: v?.type === 'select' ? v.caseName : '' };
+}
+
+/**
+ * 交給 MaaEnd 開遊戲時：打開實例的「啟動遊戲（PC）」前置任務，有指定伺服器就一併設定（沒有這個前置任務就加在最前面）
+ * 已經是想要的樣子就不寫檔；回傳是否有修改
+ */
+function ensureLaunchPretask(root, instanceId, region) {
+  const def = loadInterface(root);
+  const regionDef = def.options.LaunchGamePCRegion;
+  if (region && !(regionDef?.cases || []).some((c) => c.name === region)) throw new Error(`MaaEnd 沒有這個伺服器選項：${region}`);
+  const cur = readLaunchPretask(root, instanceId);
+  if (cur.exists && cur.enabled && (!region || cur.region === region)) return false;
+  mutate(root, instanceId, (inst) => {
+    let t = inst.tasks.find((x) => x && x.taskName === PRETASK);
+    if (!t) {
+      t = { id: newId(new Set(inst.tasks.map((x) => String(x?.id)))), taskName: PRETASK, enabled: true, optionValues: {} };
+      inst.tasks.unshift(t);
+    }
+    setEnabled(inst, t, true);
+    if (region) t.optionValues = { ...(t.optionValues || {}), LaunchGamePCRegion: { type: 'select', caseName: region } };
+  });
+  return true;
+}
+
+module.exports = { PRETASK, readLaunchPretask, ensureLaunchPretask, isHidden, defaultValue, activeCases, initValues, reachable, loadInterface, readDetail, setTasks, setOption, addTask, removeTask, cleanValue };

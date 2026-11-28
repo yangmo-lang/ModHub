@@ -16,7 +16,7 @@ const PAGES = {
   home: 'https://maaend.com/',
 };
 // meLaunchVia：'xxmi' = ModHub 先透過 XXMI 開終末地（載入 MOD）；'maaend' = 交給 MaaEnd（實例裡的「啟動遊戲」）
-const DEFAULTS = { meRoot: '', meInstance: '', meQuit: true, meLaunchVia: 'xxmi', meScheduleEnabled: false, meScheduleTime: '05:00', meLastRunDate: '', meBypassModCheck: false };
+const DEFAULTS = { meRoot: '', meInstance: '', meQuit: true, meLaunchVia: 'xxmi', meScheduleEnabled: false, meScheduleTime: '05:00', meLastRunDate: '', meBypassModCheck: false, meRegion: '' };
 
 // 啟動遊戲的前置任務與切換帳號：ModHub 自己透過 XXMI 開遊戲，這些在 ModHub 不顯示
 const isHidden = (name) => String(name || '').startsWith('__MXU_PRETASK__') || name === 'AccountSwitch';
@@ -134,6 +134,22 @@ function resolveInstance(meInstance, { instances, defaultName }) {
   return defaultName || names[0] || '';
 }
 
+// MaaEnd「啟動遊戲」前置任務的伺服器（LaunchGamePCRegion 的 case 名稱）
+const REGIONS = ['CN', 'Global', 'Bilibili', 'TapTap', 'Steam', 'Epic'];
+
+/** 依遊戲資料夾判斷是哪個版本：Epic / Steam / 國際服（Gryphline）/ B 服 / TapTap / 國服（Hypergryph）；判斷不了回傳 '' */
+function guessRegion(gameDir) {
+  const p = String(gameDir || '').replace(/\\/g, '/').toLowerCase();
+  if (!p) return '';
+  if (p.includes('epic games')) return 'Epic';
+  if (p.includes('steamapps')) return 'Steam';
+  if (/bilibili/.test(p)) return 'Bilibili';
+  if (/taptap/.test(p)) return 'TapTap';
+  if (/gryph(line|link)/.test(p)) return 'Global';
+  if (/hypergryph/.test(p)) return 'CN';
+  return '';
+}
+
 /** GitHub 最新版的 Windows 壓縮檔 { version, name, url, size, sha256, page } */
 function pickPackage(release, arch = process.arch) {
   const want = arch === 'arm64' ? 'aarch64' : 'x86_64';
@@ -150,4 +166,4 @@ function pickPackage(release, arch = process.arch) {
   };
 }
 
-module.exports = { isHidden, EXE, GAME_EXE, REPO, PAGES, DEFAULTS, options, launchArgs, checkInstance, exePath, detect, parseJsonc, taskLabels, configFile, readInstances, resolveInstance, pickPackage };
+module.exports = { isHidden, REGIONS, guessRegion, EXE, GAME_EXE, REPO, PAGES, DEFAULTS, options, launchArgs, checkInstance, exePath, detect, parseJsonc, taskLabels, configFile, readInstances, resolveInstance, pickPackage };

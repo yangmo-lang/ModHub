@@ -5,6 +5,7 @@ const me = require('./maaend.cjs');
 const meTasks = require('./maaend-tasks.cjs');
 const bypass = require('./maaend-bypass.cjs');
 const zhtw = require('./maaend-zhtw.cjs');
+const eff = require('./eff.cjs');
 const od = require('./onedragon.cjs'); // 共用 parseTime / dueNow / dateKey
 const { waitFor, processRunning, sha256File, sleep } = require('./onedragon-main.cjs');
 const net = require('./net.cjs');
@@ -34,12 +35,23 @@ function register(ipcMain, ctx) {
     try { if (dir && fs.existsSync(zhtw.backupFile(dir))) zhtw.remove(dir); } catch {}
   }
 
+  /** 交給 MaaEnd 開遊戲用的伺服器：手動指定 → 依終末地資料夾判斷 → 沿用 MaaEnd 原本的設定 */
+  function launchInfo(found, cfg, instance) {
+    const gameDir = eff.resolveGameDir(ctx.getSettings());
+    const guess = me.guessRegion(gameDir);
+    const id = cfg.instances.find((i) => i.name === instance)?.id;
+    let pretask = null;
+    try { if (found && id) pretask = meTasks.readLaunchPretask(found, id); } catch {}
+    const chosen = me.options(ctx.getSettings()).meRegion;
+    return { gameDir, guess, pretask, region: (me.REGIONS.includes(chosen) && chosen) || guess || pretask?.region || '' };
+  }
+
   function status() {
     const { o, found, cfg, instance } = info();
     restoreZhtw(found);
     let bypassState = 'missing';
     try { bypassState = found ? bypass.status(found) : 'missing'; } catch {}
-    return { ...o, found, exe: found ? me.exePath(found) : '', pages: me.PAGES, configuredButMissing: Boolean(o.meRoot && !found), ...cfg, instance, bypassState };
+    return { ...o, found, exe: found ? me.exePath(found) : '', pages: me.PAGES, configuredButMissing: Boolean(o.meRoot && !found), ...cfg, instance, bypassState, launch: launchInfo(found, cfg, instance) };
   }
 
   /** 工作排程用的命令列（找不到 MaaEnd 或沒有實例時不建立） */
@@ -62,6 +74,11 @@ function register(ipcMain, ctx) {
     if (o.meBypassModCheck) bypass.apply(found, true);
     // MaaEnd 原生支援繁中遊戲畫面（比對文字裡繁簡都有），舊版 ModHub 的 OCR 字典繁轉簡反而會讓它比對不到，有備份就還原
     restoreZhtw(found);
+    // 交給 MaaEnd 開遊戲：打開實例的「啟動遊戲」前置任務並設定伺服器（這兩項在 ModHub 的任務清單裡不顯示）
+    if (o.meLaunchVia === 'maaend') {
+      const id = cfg.instances.find((i) => i.name === instance)?.id;
+      if (id) meTasks.ensureLaunchPretask(found, id, launchInfo(found, cfg, instance).region);
+    }
     busy = true;
     try {
       if (o.meLaunchVia === 'xxmi' && !(await processRunning(me.GAME_EXE))) {
