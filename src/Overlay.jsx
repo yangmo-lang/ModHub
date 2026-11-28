@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errText, img } from './common.jsx';
 import MapView from './MapView.jsx';
+import KeysDialog from './KeysDialog.jsx';
 
 const VIEW_KEY = 'modhub.overlayView';
 const MODE_KEY = 'modhub.overlayMode';
@@ -26,6 +27,9 @@ export default function Overlay() {
   modeRef.current = mode;
   const setMode = (m) => { setModeState(m); localStorage.setItem(MODE_KEY, m); };
   const [busy, setBusy] = useState(false);
+  const [keysFor, setKeysFor] = useState(null); // 顯示按鍵設定的 MOD
+  const keysRef = useRef(null);
+  keysRef.current = keysFor;
   const [msg, setMsg] = useState(null); // { text, kind }
   const [hotkey, setHotkey] = useState('');
   const searchRef = useRef(null);
@@ -51,6 +55,7 @@ export default function Overlay() {
       setRunning(det ? g : null);
       setMsg(null);
       setQuery('');
+      setKeysFor(null);
       setGameId(g);
       load(g);
       api.overlaySetWide(HAS_MAP.has(g) && modeRef.current === 'map').catch(() => {});
@@ -58,7 +63,8 @@ export default function Overlay() {
       setTimeout(() => searchRef.current?.focus(), 50);
     });
     const offChanged = api.onModsChanged(({ gameId: g }) => { if (g === gameRef.current) load(g); });
-    const onKey = (e) => { if (e.key === 'Escape') api.overlayHide(); };
+    // Esc：先關按鍵視窗，再按一次才收起面板
+    const onKey = (e) => { if (e.key !== 'Escape') return; if (keysRef.current) setKeysFor(null); else api.overlayHide(); };
     window.addEventListener('keydown', onKey);
     return () => { off(); offChanged(); window.removeEventListener('keydown', onKey); };
   }, [load]);
@@ -178,6 +184,7 @@ export default function Overlay() {
                     title={`${m.folderName}（點一下${m.enabled ? '停用' : '啟用'}）`}>
                     {m.preview ? <img src={img(m.preview)} alt="" loading="lazy" /> : <div className="ov-noimg">無預覽圖</div>}
                     <span className="ov-state">{m.enabled ? '啟用' : '停用'}</span>
+                    {m.keyCount > 0 && <KeysBadge m={m} onOpen={setKeysFor} />}
                     <span className="ov-card-name">{m.name}</span>
                   </button>
                 ))}
@@ -186,6 +193,7 @@ export default function Overlay() {
               <label key={m.id} className={`ov-mod ${m.enabled ? 'on' : 'off'}`} title={m.folderName}>
                 {m.preview ? <img className="ov-thumb" src={img(m.preview)} alt="" loading="lazy" /> : <span className="ov-thumb" />}
                 <span className="ov-name">{m.name}</span>
+                {m.keyCount > 0 && <KeysBadge m={m} onOpen={setKeysFor} />}
                 <span className="switch">
                   <input type="checkbox" checked={m.enabled} disabled={busy} onChange={() => toggle(m)} />
                   <span />
@@ -196,11 +204,22 @@ export default function Overlay() {
         ))}
       </div>
 
+      {keysFor && <KeysDialog gameId={gameId} mod={keysFor} compact onClose={() => setKeysFor(null)} />}
+
       <footer className="ov-foot">
         改完回遊戲按 <kbd>F10</kbd> 重新載入 · <kbd>Esc</kbd>{hotkey ? <> 或 <kbd>{hotkey}</kbd></> : null} 收起
         {game && !running && <span className="ov-hint">　沒偵測到執行中的遊戲，顯示 {game.short || game.name}</span>}
       </footer>
       </>}
     </div>
+  );
+}
+
+/** 卡片 / 清單上的「⌨ 按鍵數」：點了看按鍵，不會切換 MOD */
+function KeysBadge({ m, onOpen }) {
+  const open = (e) => { e.preventDefault(); e.stopPropagation(); onOpen(m); };
+  return (
+    <span className="ov-keys" role="button" tabIndex={0} title="查看按鍵設定" onClick={open}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') open(e); }}>⌨ {m.keyCount}</span>
   );
 }

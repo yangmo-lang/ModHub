@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('modhub', {
   overlayHide: () => ipcRenderer.invoke('overlay:hide'),
   overlaySetWide: (on) => ipcRenderer.invoke('overlay:setWide', on),
   mapsList: () => ipcRenderer.invoke('maps:list'),
+  modKeys: (gameId, modPath) => ipcRenderer.invoke('mods:keys', gameId, modPath),
   effStatus: (opts) => ipcRenderer.invoke('eff:status', opts),
   effInstallFramework: () => ipcRenderer.invoke('eff:installFramework'),
   onEffProgress: on('eff:progress'),

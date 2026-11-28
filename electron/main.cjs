@@ -42,6 +42,8 @@ const trayMod = require('./tray.cjs');
 const maps = require('./maps.cjs');
 const eff = require('./eff.cjs');
 const effMain = require('./eff-main.cjs');
+const keybinds = require('./keybinds.cjs');
+const keyCache = new Map(); // ini 路徑 → 解析過的按鍵（依大小 + 修改時間失效）
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -317,7 +319,10 @@ app.whenReady().then(() => {
       cat.displayName = cat.character ? cat.character.nameTw : chars.toTw(cat.name);
       cat.manual = Object.prototype.hasOwnProperty.call(manual, cat.name);
     }
-    for (const m of result.mods) m.categoryTw = chars.toTw(m.category);
+    for (const m of result.mods) {
+      m.categoryTw = chars.toTw(m.category);
+      m.keyCount = keybinds.modKeyBinds(m.path, keyCache).length; // ini 裡的 [Key…] 按鍵數（有快取）
+    }
     return {
       modsDir,
       ...result,
@@ -381,6 +386,13 @@ app.whenReady().then(() => {
       if (!cat.hasOwnCover && cat.character?.avatar && scanner.writeCover(root, cat.path, cat.character.avatar)) written++;
     }
     return written;
+  });
+
+  // MOD 的按鍵設定明細（ini 的 [Key…] 區段）
+  ipcMain.handle('mods:keys', (_e, gameId, modPath) => {
+    if (gameId === eff.EFF_ID) return [];
+    scanner.assertInside(config.modsDirFor(settings, gameById(gameId).id), modPath);
+    return keybinds.modKeyBinds(modPath, keyCache);
   });
 
   ipcMain.handle('mods:setEnabled', (_e, gameId, modPath, enabled) => {

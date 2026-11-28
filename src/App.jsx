@@ -6,6 +6,7 @@ import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
 import MapView from './MapView.jsx';
 import EffBar from './EffBar.jsx';
+import KeysDialog from './KeysDialog.jsx';
 import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 import Picker from './Picker.jsx';
@@ -63,6 +64,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(null);
   const [sort, setSort] = useState('release');
   const [facet, setFacet] = useState({ element: '', role: '', rarity: '', hasMods: false });
+  const [keysFor, setKeysFor] = useState(null); // 顯示按鍵設定的 MOD
   const [picker, setPicker] = useState(null); // { mode: 'map', category } | { mode: 'move', mod }
   const [view, setView] = useState('local'); // 'local' | 'online' | 'codex' | 'planner' | 'gacha' | 'blueprint' | 'map'
   const [mapOpened, setMapOpened] = useState(false); // 開過地圖後保留 <webview>，切分頁回來不用重新載入
@@ -510,6 +512,7 @@ export default function App() {
                 onMoveSuggested={() => moveMod(m, { charId: m.suggestedCharId }, m.suggestedCategory)}
                 onPick={isEff ? null : () => setPicker({ mode: 'move', mod: m })}
                 onOpen={() => api.openPath(scanId, m.path)}
+                onKeys={() => setKeysFor(m)}
                 onTrash={() => trash(m)} />
             ))}
           </div>
@@ -534,6 +537,8 @@ export default function App() {
           }}
         />
       )}
+
+      {keysFor && <KeysDialog gameId={scanId} mod={keysFor} onClose={() => setKeysFor(null)} />}
 
       {picker && (
         <Picker
