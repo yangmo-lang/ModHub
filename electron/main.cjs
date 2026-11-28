@@ -464,6 +464,8 @@ ${modPath}`,
     getWindow: () => mainWin,
     getSettings: () => settings,
     getHotkey: () => overlay?.hotkey || '',
+    games: config.GAMES.map((g) => ({ id: g.id, name: g.name, short: g.short })),
+    onLaunch: (gameId, opts) => launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) }),
     onOverlay: () => overlay?.show(),
     onQuit: () => { quitting = true; app.quit(); },
   });
