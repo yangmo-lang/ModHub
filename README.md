@@ -28,6 +28,21 @@ npm test         # 掃描/切換邏輯單元測試
 
 - 分頁列右邊的「▶ 啟動<遊戲>」：與 XXMI 的「Quick Start」捷徑相同（`XXMI Launcher.exe --nogui --xxmi <SRMI|WWMI|ZZMI|EFMI>`），載入 MOD 並啟動遊戲
 - 「XXMI」按鈕：開啟 XXMI Launcher 視窗並切到該遊戲；找不到 `<XXMI 資料夾>ResourcesBinXXMI Launcher.exe` 時不顯示這兩個按鈕
+- XXMI Launcher 要求系統管理員權限，所以 ModHub 透過 Windows Shell 啟動它（和雙擊捷徑一樣），每次都會跳出 UAC 詢問；按「否」會顯示提示
+
+### 遊戲內疊加介面
+
+- 在遊戲中按 **Alt+N**（可在「設定」改成其他組合鍵或停用）叫出置頂的小面板：搜尋、開關 MOD、切換預設組合；改完回遊戲按 F10 重新載入
+- 面板預設以圖片顯示（MOD 預覽圖、角色頭像，點卡片切換啟用），也可切成清單
+- 自動判斷正在執行的遊戲（StarRail.exe、ZenlessZoneZero.exe、Client-Win64-Shipping.exe、Endfield.exe），沒有就用 ModHub 目前的遊戲
+- 再按一次快捷鍵、按 Esc 或點回遊戲就收起
+- 不注入遊戲，只是一般的置頂視窗：遊戲要設為「視窗化」或「無邊框全螢幕」，獨占全螢幕時看不到
+- `ModHub.exe --toggle-overlay` 也能叫出 / 收起（可綁到搖桿或其他快捷鍵工具）
+
+### 系統匣
+
+- 最小化或按 ✕ 時縮到系統匣（可在「設定」分別關掉），遊戲內面板的快捷鍵仍然有效
+- 點系統匣圖示開回主視窗；右鍵選單：開啟 ModHub、遊戲內面板、結束 ModHub
 
 ### 預設組合
 
@@ -61,7 +76,12 @@ npm test         # 掃描/切換邏輯單元測試
 - `electron/gacha/uigf.cjs` UIGF / SRGF 轉換（有測試）
 - `electron/config.cjs` 遊戲定義、設定檔（存在 Electron userData）
 - `electron/main.cjs` 視窗、IPC、`modimg://` 圖片協定（只允許 Mods 目錄內）
-- `src/` React 介面
+- `electron/schedule.cjs` 卡池時間表 / 活動排程（有測試）
+- `electron/watcher.cjs` 監看 Mods 資料夾（有測試）
+- `electron/overlay.cjs` 遊戲內疊加介面與全域快捷鍵（有測試）
+- `electron/tray.cjs` 系統匣（有測試）；圖示在 `electron/assets/`
+- `scripts/release.cjs` 發布流程（見下方）
+- `src/` React 介面（`App.jsx` 主畫面；`ModCard`、`Picker`、`Settings` 各自一個檔案，共用工具在 `common.jsx`）
 
 ### 圖鑑 / 前瞻
 
@@ -71,6 +91,10 @@ npm test         # 掃描/切換邏輯單元測試
   - 鳴潮目前 nanoka 沒有測試服資料，所以沒有前瞻
 - 終末地（森空島 wiki）：干員、武器、裝扮；前瞻 = wiki 的「前瞻」標記，另列目前 UP 卡池（含剩餘時間）與活動
   - 「官方情報」只有在 wiki 頁面互動後才會載入，抓不到時就不顯示
+- 星鐵 / 鳴潮 / 絕區零的前瞻另列「近期與未來卡池」（`electron/schedule.cjs`）：
+  - 卡池時間來自 [BannerHistory](https://bannerhistory.app/tw)：結束不到兩週、進行中、即將開始與時間未公布的卡池，標示進行中 / 即將開始 / 剩餘時間
+  - 星鐵另從 [BWiki 首頁](https://wiki.biligame.com/sr/%E9%A6%96%E9%A1%B5)讀本期限時活動與光錐卡池（國服時間）
+  - 卡池角色會對應到圖鑑，點了開詳細頁；來源讀不到時只顯示錯誤，不影響圖鑑其他部分
 - 角色詳細頁可跳到本機該角色的 MOD，或「找 MOD」直接帶入線上搜尋
 
 ### 養成計算
@@ -155,6 +179,17 @@ npm test         # 掃描/切換邏輯單元測試
   - MOD 資料夾寫入 `.modhub.json` 記錄來源，線上列表會標「已安裝 / 有更新」
   - 更新時舊版移到 `%APPDATA%\modhub\backups\`，保留原本的啟用 / 停用狀態
 
+## 發布
+
+```powershell
+npm version <版本> --no-git-tag-version   # 之後 commit、push
+npm run release -- --notes changes.md            # 測試、建置、掃描 app.asar、產生發布說明（不上傳）
+npm run release -- --notes changes.md --publish  # 另外建立 GitHub Release、上傳四個檔案並下載回來比對
+```
+
+- `changes.md` 只寫這版的變更條列；下載表與 SHA-256 由腳本加上，輸出在 `release/v<版本>/release-notes.md`
+- 個人資料掃描的樣式在執行時從這台電腦取得（帳號名稱、家目錄、git email），不寫進 repo
+
 ## 待辦
 
 - 終末地新角色的英文名（`ENDFIELD_EN`）需要手動補
@@ -166,4 +201,4 @@ ModHub 以 [MIT 授權](LICENSE) 釋出。
 - 打包的第三方套件各自依其授權：React、node-unrar-js、7zip-bin（MIT）、opencc-js（MIT 與 Apache-2.0）；
   7zip-bin 內含的 `7za.exe` 屬於 7-Zip（GNU LGPL 與 unRAR 授權限制）
 - 遊戲名稱、角色名稱與圖片屬於各自的權利人（HoYoverse、庫洛、鷹角網路等）；ModHub 是非官方工具，與上述公司無關
-- 圖鑑、卡池等資料於執行時從 nanoka.cc、森空島 wiki、akedata 與官方 API 讀取，不隨程式散布
+- 圖鑑、卡池等資料於執行時從 nanoka.cc、森空島 wiki、BannerHistory、BWiki、akedata 與官方 API 讀取，不隨程式散布

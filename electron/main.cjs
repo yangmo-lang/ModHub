@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, screen, Tray, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -37,12 +37,16 @@ const blueprint = require('./blueprint.cjs');
 const presets = require('./presets.cjs');
 const launcher = require('./launcher.cjs');
 const { createModsWatcher } = require('./watcher.cjs');
+const overlayMod = require('./overlay.cjs');
+const trayMod = require('./tray.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
 
 // 只允許一個 ModHub；第二次啟動（例如點 nxm:// 連結）把參數交給既有視窗
 let handleNxm = null;
+let mainWin = null;
+let overlay = null;
 const pendingNxm = [];
 const nxmFromArgv = (argv) => argv.filter((a) => /^nxm:\/\//i.test(a));
 const gotLock = app.requestSingleInstanceLock();
@@ -51,8 +55,10 @@ if (!gotLock) {
 } else {
   pendingNxm.push(...nxmFromArgv(process.argv));
   app.on('second-instance', (_e, argv) => {
-    const w = BrowserWindow.getAllWindows()[0];
-    if (w) { if (w.isMinimized()) w.restore(); w.focus(); }
+    // ModHub.exe --toggle-overlay：叫出 / 收起疊加介面（可綁到搖桿或其他快捷鍵工具）
+    if (argv.includes('--toggle-overlay')) { overlay?.toggle(); return; }
+    const w = mainWin && !mainWin.isDestroyed() ? mainWin : null;
+    if (w) { if (w.isMinimized()) w.restore(); w.show(); w.focus(); }
     for (const l of nxmFromArgv(argv)) (handleNxm ? handleNxm(l) : pendingNxm.push(l));
   });
 }
@@ -88,6 +94,12 @@ function isInsideAnyRoot(p) {
   });
 }
 
+// 主視窗與疊加介面共用同一份前端，疊加介面用 #overlay
+function loadRenderer(win, hash) {
+  if (isDev) win.loadURL(`http://localhost:5173/${hash ? `#${hash}` : ''}`);
+  else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'), hash ? { hash } : undefined);
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -96,6 +108,7 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#14161c',
     title: 'ModHub',
+    icon: APP_ICON,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -104,9 +117,16 @@ function createWindow() {
       sandbox: true,
     },
   });
-  if (isDev) win.loadURL('http://localhost:5173');
-  else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  loadRenderer(win);
+  mainWin = win;
+  tray?.attach(win, () => quitting);
+  // 疊加視窗是隱藏的常駐視窗，主視窗關閉時一起關掉，程式才會結束
+  win.on('closed', () => { mainWin = null; overlay?.destroy(); tray?.destroy(); tray = null; });
 }
+
+const APP_ICON = path.join(__dirname, 'assets', 'icon.png');
+let tray = null;
+let quitting = false; // 真的要結束時（系統匣「結束」、更新安裝）主視窗才會關閉，否則縮到系統匣
 
 app.whenReady().then(() => {
   if (!gotLock) return;
@@ -137,7 +157,7 @@ app.whenReady().then(() => {
   }));
 
   // 介面只能改這些設定；金鑰等由專用 IPC 處理
-  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult']);
+  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose']);
   ipcMain.handle('settings:save', (_e, patch) => {
     const clean = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => RENDERER_KEYS.has(k)));
     settings = { ...settings, ...clean };
@@ -320,8 +340,8 @@ app.whenReady().then(() => {
   });
 
   // 透過 XXMI Launcher 啟動遊戲（opts.gui = 只開 XXMI 視窗）
-  ipcMain.handle('xxmi:launch', (_e, gameId, opts) => {
-    const r = launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) });
+  ipcMain.handle('xxmi:launch', async (_e, gameId, opts) => {
+    const r = await launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) });
     return { args: r.args };
   });
   ipcMain.handle('xxmi:available', () => fs.existsSync(launcher.launcherExe(settings.xxmiRoot)));
@@ -403,6 +423,44 @@ ${modPath}`,
     return shell.openPath(p);
   });
 
+  // ---------- 遊戲內疊加介面（全域快捷鍵） ----------
+  overlay = overlayMod.createOverlay({
+    BrowserWindow, globalShortcut, screen,
+    preload: path.join(__dirname, 'preload.cjs'),
+    load: loadRenderer,
+    currentGame: () => settings.lastGame || 'SRMI',
+  });
+  const savedHotkey = settings.overlayHotkey ?? overlayMod.DEFAULT_HOTKEY;
+  let hotkeyError = '';
+  try { overlay.setHotkey(savedHotkey); } catch (e) { hotkeyError = e.message; }
+  ipcMain.handle('overlay:getHotkey', () => ({ hotkey: overlay.hotkey, saved: savedHotkey, default: overlayMod.DEFAULT_HOTKEY, error: hotkeyError }));
+  ipcMain.handle('overlay:setHotkey', (_e, key) => {
+    const hotkey = overlay.setHotkey(String(key ?? ''));
+    hotkeyError = '';
+    settings = { ...settings, overlayHotkey: hotkey };
+    config.saveSettings(app.getPath('userData'), settings);
+    tray?.refreshMenu();
+    return hotkey;
+  });
+  ipcMain.handle('overlay:suspend', (_e, on) => overlay.suspend(Boolean(on)));
+  ipcMain.handle('overlay:hide', () => overlay.hide());
+  ipcMain.handle('overlay:openMain', () => {
+    overlay.hide();
+    if (mainWin && !mainWin.isDestroyed()) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }
+  });
+  app.on('will-quit', () => globalShortcut.unregisterAll());
+
+  // ---------- 系統匣 ----------
+  tray = trayMod.createTray({
+    Tray, Menu,
+    icon: path.join(__dirname, 'assets', 'tray.png'),
+    getWindow: () => mainWin,
+    getSettings: () => settings,
+    getHotkey: () => overlay?.hotkey || '',
+    onOverlay: () => overlay?.show(),
+    onQuit: () => { quitting = true; app.quit(); },
+  });
+
   createWindow();
 });
 
@@ -411,6 +469,7 @@ app.on('window-all-closed', () => app.quit());
 // 關閉前把官方帳號登入分區的 cookie 寫回磁碟（Chromium 預設延遲寫入，太快關閉會遺失登入）
 let flushed = false;
 app.on('before-quit', (e) => {
+  quitting = true;
   if (flushed) return;
   e.preventDefault();
   flushed = true;

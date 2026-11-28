@@ -3,6 +3,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 const api = window.modhub;
 const errText = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 const fmtDate = (t) => (t ? new Date(t).toLocaleDateString() : '');
+// 卡池 / 活動：月/日 時:分（本機時區）
+const fmtTime = (t) => (t ? new Date(t).toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) : '');
+function poolStatus(p, now = Date.now()) {
+  if (p.unannounced) return { cls: 'soon', text: '時間未公布' };
+  if (p.start && p.start > now) return { cls: 'soon', text: '即將開始' };
+  if (p.end && p.end <= now) return { cls: 'ended', text: '已結束' };
+  return { cls: 'live', text: '進行中' };
+}
 const PREVIEW = '__preview__';
 
 function rarityText(it) {
@@ -177,6 +185,11 @@ function ItemCard({ it, mods, onClick }) {
 function PreviewPage({ codex, modCount, onSelect }) {
   const p = codex.preview;
   const nothing = !p.groups.length && !p.pools.length && !p.activities.length && !p.news.length;
+  const itemById = useMemo(() => {
+    const m = new Map();
+    for (const s of codex.sections) for (const it of s.items) m.set(`${it.kind}:${it.id}`, it);
+    return m;
+  }, [codex]);
   return (
     <div className="preview-page">
       <p className="preview-note">{p.note}</p>
@@ -193,24 +206,34 @@ function PreviewPage({ codex, modCount, onSelect }) {
 
       {p.pools.length > 0 && (
         <section className="pv-section">
-          <h3>目前卡池<span>{p.pools.length}</span></h3>
+          <h3>{codex.gameId === 'EFMI' ? '目前卡池' : '近期與未來卡池'}<span>{p.pools.length}</span></h3>
           <div className="pool-list">
-            {p.pools.map((pool, i) => (
-              <div key={i} className="pool">
-                <div className="pool-head">
-                  <b>{pool.name}</b>
-                  <small>{pool.type} · {fmtDate(pool.start)} – {fmtDate(pool.end)} · {timeLeft(pool.start, pool.end)}</small>
+            {p.pools.map((pool, i) => {
+              const st = poolStatus(pool);
+              return (
+                <div key={i} className={`pool ${st.cls}`}>
+                  <div className="pool-head">
+                    <b>{pool.name}</b>
+                    <span className={`pool-status ${st.cls}`}>{st.text}</span>
+                    <small>
+                      {pool.type}
+                      {!pool.unannounced && <> · {fmtTime(pool.start)} – {fmtTime(pool.end)}{pool.projected ? '（預估）' : ''} · {timeLeft(pool.start, pool.end)}</>}
+                    </small>
+                  </div>
+                  <div className="pool-items">
+                    {pool.items.map((x, j) => {
+                      const ref = x.id && itemById.get(`${x.kind}:${x.id}`);
+                      return (
+                        <button key={j} className="pool-item" onClick={() => (ref ? onSelect(ref) : x.url && api.openExternal(x.url))} title={x.name}>
+                          {x.icon && <img src={x.icon} alt="" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />}
+                          <span>{x.name}{x.up ? ' · UP' : ''}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="pool-items">
-                  {pool.items.map((x, j) => (
-                    <button key={j} className="pool-item" onClick={() => x.url && api.openExternal(x.url)} title={x.name}>
-                      {x.icon && <img src={x.icon} alt="" referrerPolicy="no-referrer" />}
-                      <span>{x.name}{x.up ? ' · UP' : ''}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -224,7 +247,7 @@ function PreviewPage({ codex, modCount, onSelect }) {
                 {a.pic && <img src={a.pic} alt="" referrerPolicy="no-referrer" />}
                 <div>
                   <b>{a.name}</b>
-                  <small>{a.type} · {fmtDate(a.start)} – {fmtDate(a.end)} · {timeLeft(a.start, a.end)}</small>
+                  <small>{a.type} · {fmtTime(a.start)} – {fmtTime(a.end)} · {timeLeft(a.start, a.end)}</small>
                 </div>
               </button>
             ))}
@@ -244,6 +267,15 @@ function PreviewPage({ codex, modCount, onSelect }) {
             ))}
           </div>
         </section>
+      )}
+
+      {(p.scheduleSources?.length > 0 || p.scheduleErrors?.length > 0) && (
+        <p className="preview-sources">
+          {p.scheduleSources?.length > 0 && <>卡池與活動時間來源：{p.scheduleSources.map((s, i) => (
+            <React.Fragment key={s.url}>{i > 0 && '、'}<button className="link" onClick={() => api.openExternal(s.url)}>{s.name}</button></React.Fragment>
+          ))}（社群整理，時間以遊戲內公告為準）</>}
+          {p.scheduleErrors?.map((e) => <span key={e} className="error-text"> 讀取失敗：{e}</span>)}
+        </p>
       )}
     </div>
   );

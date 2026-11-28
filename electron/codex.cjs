@@ -10,6 +10,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { fetchJson } = require('./net.cjs');
 const { META, toTw, toTwText } = require('./characters.cjs');
+const schedule = require('./schedule.cjs');
 
 const BASE = 'https://static.nanoka.cc';
 const NANOKA_GAME = { SRMI: 'hsr', WWMI: 'ww', ZZMI: 'zzz' };
@@ -354,12 +355,55 @@ function sklandCodex(w, DETAIL) {
   };
 }
 
+// ---- 卡池時間表 / 活動排程（失敗不影響圖鑑） ----
+const normName = (s) => String(s || '').toLowerCase().replace(/[\s•·・\-_:：「」]/g, '');
+
+/** 依名稱找圖鑑項目：繁中名、簡中名、英文名 */
+function itemFinder(sections) {
+  const map = new Map();
+  for (const sec of sections) {
+    for (const it of sec.items) {
+      for (const k of [it.name, it.zh, it.en]) {
+        const n = normName(k);
+        if (n && !map.has(n)) map.set(n, it);
+      }
+    }
+  }
+  return (...names) => {
+    const keys = names.map(normName).filter(Boolean);
+    for (const n of keys) {
+      const hit = map.get(n);
+      if (hit) return hit;
+    }
+    // 稱號前綴（例如「星神★阿哈」對「阿哈」）：圖鑑名稱以它結尾、且只有一個符合時才算
+    for (const n of keys) {
+      if (n.length < 2) continue;
+      const hits = new Set([...map].filter(([k]) => k.endsWith(n) && /[★☆]/.test(k)).map(([, v]) => v));
+      if (hits.size === 1) return [...hits][0];
+    }
+    return null;
+  };
+}
+
+async function addSchedule(data, gameId, fetchSchedule = schedule.getSchedule) {
+  try {
+    const s = await fetchSchedule(gameId, { findItem: itemFinder(data.sections) });
+    data.preview.pools = s.pools;
+    data.preview.activities = s.activities;
+    data.preview.scheduleSources = s.sources;
+    data.preview.scheduleErrors = s.errors;
+  } catch (e) {
+    data.preview.scheduleErrors = [e.message];
+  }
+}
+
 // ---- 快取 ----
 function cacheFile(userDataDir, gameId) {
   return path.join(userDataDir, 'codex', `${gameId}.json`);
 }
 
-async function getCodex(userDataDir, gameId, { force = false, loadWiki, DETAIL } = {}) {
+async function getCodex(userDataDir, gameId, opts = {}) {
+  const { force = false, loadWiki, DETAIL } = opts;
   const file = cacheFile(userDataDir, gameId);
   if (!force) {
     try {
@@ -368,7 +412,10 @@ async function getCodex(userDataDir, gameId, { force = false, loadWiki, DETAIL }
     } catch {}
   }
   let data;
-  if (NANOKA_GAME[gameId]) data = await nanokaCodex(gameId);
+  if (NANOKA_GAME[gameId]) {
+    data = await nanokaCodex(gameId);
+    await addSchedule(data, gameId, opts.fetchSchedule);
+  }
   else if (gameId === 'EFMI') data = sklandCodex(await loadWiki(), DETAIL);
   else throw new Error('這個遊戲沒有圖鑑來源');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -376,4 +423,4 @@ async function getCodex(userDataDir, gameId, { force = false, loadWiki, DETAIL }
   return data;
 }
 
-module.exports = { getCodex, nanokaCodex, nanokaDetail, sklandCodex, cleanText, versionNewer };
+module.exports = { getCodex, nanokaCodex, nanokaDetail, sklandCodex, cleanText, versionNewer, itemFinder, addSchedule };

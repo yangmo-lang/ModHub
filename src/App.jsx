@@ -6,12 +6,13 @@ import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
 import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
+import Picker from './Picker.jsx';
+import ModCard from './ModCard.jsx';
+import Settings, { useUpdate, UpdateBar } from './Settings.jsx';
+import { api, img, errText, metaLine, Avatar } from './common.jsx';
 
-const api = window.modhub;
-const img = (p) => (p ? `modimg://img/?p=${encodeURIComponent(p)}` : null);
 const ALL = '__all__';
 const UNCAT = '未分類';
-const errText = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
 const SOURCE_LABEL = { 'nanoka.cc': 'nanoka', 'wiki.skland.com': '森空島 wiki' };
 
 function useToast() {
@@ -23,15 +24,6 @@ function useToast() {
     return () => clearTimeout(t);
   }, [toast]);
   return [toast, show];
-}
-
-function metaLine(meta) {
-  if (!meta) return '';
-  return [meta.rarity ? `${meta.rarity}★` : null, meta.element, meta.role, meta.weapon].filter(Boolean).join(' · ');
-}
-
-function Avatar({ src, name, className = 'cat-cover' }) {
-  return src ? <img className={className} src={img(src)} alt="" loading="lazy" /> : <div className={className}>{(name || '?').slice(0, 1)}</div>;
 }
 
 const SORTS = [
@@ -475,31 +467,13 @@ export default function App() {
         ) : (
           <div className="grid">
             {visibleMods.map((m) => (
-              <article key={m.id} className={`card ${m.enabled ? 'on' : 'off'}`}>
-                <div className="thumb" onDoubleClick={() => toggle(m)}>
-                  {m.preview ? <img src={img(m.preview)} alt="" loading="lazy" /> : <div className="noimg">無預覽圖</div>}
-                  <span className="chip">{m.categoryTw}</span>
-                  {m.suggestedCategory && (
-                    <button className="chip suggest" disabled={busy} title={`移入「${m.suggestedCategory}」角色資料夾`}
-                      onClick={() => moveMod(m, { charId: m.suggestedCharId }, m.suggestedCategory)}>
-                      移入 {data.allCharacters?.find((c) => c.id === m.suggestedCharId)?.nameTw || m.suggestedCategory}
-                    </button>
-                  )}
-                </div>
-                <div className="card-body">
-                  <div className="card-title" title={m.folderName}>{m.name}</div>
-                  <div className="card-meta">{m.iniCount} 個 ini · {new Date(m.mtime).toLocaleDateString()}</div>
-                  <div className="card-actions">
-                    <label className="switch" title={m.enabled ? '點擊停用' : '點擊啟用'}>
-                      <input type="checkbox" checked={m.enabled} onChange={() => toggle(m)} disabled={busy} />
-                      <span />
-                    </label>
-                    <button className="link" onClick={() => setPicker({ mode: 'move', mod: m })} disabled={busy} title="移到其他角色或分類資料夾">{m.category !== UNCAT ? '移動…' : '移入…'}</button>
-                    <button className="link" onClick={() => api.openPath(gameId, m.path)} title="在檔案總管開啟">開啟</button>
-                    <button className="link danger" onClick={() => trash(m)} disabled={busy} title="移到資源回收筒（可從資源回收筒還原）">刪除</button>
-                  </div>
-                </div>
-              </article>
+              <ModCard key={m.id} m={m} busy={busy} uncategorized={m.category === UNCAT}
+                suggestedName={m.suggestedCategory && (data.allCharacters?.find((c) => c.id === m.suggestedCharId)?.nameTw || m.suggestedCategory)}
+                onToggle={() => toggle(m)}
+                onMoveSuggested={() => moveMod(m, { charId: m.suggestedCharId }, m.suggestedCategory)}
+                onPick={() => setPicker({ mode: 'move', mod: m })}
+                onOpen={() => api.openPath(gameId, m.path)}
+                onTrash={() => trash(m)} />
             ))}
           </div>
         )}
@@ -561,182 +535,6 @@ export default function App() {
       {!updateHidden && <UpdateBar update={update} onHide={() => setUpdateHidden(true)} />}
 
       {toast && <div key={toast.id} className={`toast ${toast.kind}`}>{toast.msg}</div>}
-    </div>
-  );
-}
-
-/** 選角色：手動對應分類資料夾，或把未分類 MOD 移進去 */
-function Picker({ picker, characters, categories, onClose, onMap, onMove }) {
-  const [q, setQ] = useState('');
-  const isMap = picker.mode === 'map';
-  const title = isMap ? `「${picker.category.name}」對應哪個角色？` : `把「${picker.mod.name}」移到…`;
-  const qq = q.trim().toLowerCase();
-  const list = characters.filter((c) => !qq || `${c.name} ${c.nameTw} ${c.en}`.toLowerCase().includes(qq));
-  const otherCats = isMap ? [] : categories.filter((c) => !c.character && (!qq || `${c.name} ${c.displayName}`.toLowerCase().includes(qq)));
-  // 移動時標出 MOD 目前所在的分類
-  const curCat = isMap ? null : categories.find((c) => c.name === picker.mod.category);
-  return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal picker" onClick={(e) => e.stopPropagation()}>
-        <h3>{title}</h3>
-        <input className="search" autoFocus placeholder="搜尋角色（中文 / 英文）" value={q} onChange={(e) => setQ(e.target.value)} />
-        <div className="pick-grid">
-          {list.map((c) => {
-            const current = isMap ? picker.category.character?.id === c.id : curCat?.character?.id === c.id;
-            return (
-              <button key={c.id} className={`pick ${current ? 'current' : ''}`} onClick={() => (isMap ? onMap(c.id) : onMove({ charId: c.id }, c.nameTw))}>
-                <Avatar src={c.avatar} name={c.nameTw} className="pick-img" />
-                <span>{c.nameTw}</span>
-              </button>
-            );
-          })}
-          {otherCats.map((c) => (
-            <button key={c.name} className={`pick ${curCat?.name === c.name ? 'current' : ''}`} onClick={() => onMove({ categoryName: c.name }, c.displayName)}>
-              <Avatar src={c.cover} name={c.displayName} className="pick-img" />
-              <span>{c.displayName}</span>
-            </button>
-          ))}
-        </div>
-        <div className="row end">
-          {isMap && picker.category.manual && <button className="btn" onClick={() => onMap(null)}>改回自動辨識</button>}
-          {isMap && <button className="btn" onClick={() => onMap('__none__')}>不是角色（NPC / UI 等）</button>}
-          <button className="btn ghost" onClick={onClose}>取消</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NexusSettings() {
-  const [st, setSt] = useState(null);
-  const [key, setKey] = useState('');
-  const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-  const refresh = () => api.nexusStatus().then(setSt);
-  useEffect(() => { refresh(); }, []);
-  const run = async (fn) => {
-    setBusy(true);
-    setMsg('');
-    try { await fn(); } catch (e) { setMsg(errText(e)); } finally { setBusy(false); refresh(); }
-  };
-  if (!st) return null;
-  return (
-    <div className="nexus-settings">
-      <div className="ns-title">Nexus Mods</div>
-      {st.hasKey ? (
-        <div className="row">
-          <span className="ns-status">已連結：{st.user || '（未知）'} · {st.premium ? 'Premium（可直接下載）' : '免費會員（需從網頁按 Mod Manager Download）'}</span>
-          <button className="btn" disabled={busy} onClick={() => run(() => api.nexusClearKey())}>移除金鑰</button>
-        </div>
-      ) : (
-        <>
-          <div className="row">
-            <input type="password" placeholder="貼上你的 Nexus API 金鑰" value={key} onChange={(e) => setKey(e.target.value)} />
-            <button className="btn primary" disabled={busy || !key.trim()} onClick={() => run(async () => { await api.nexusSetKey(key); setKey(''); })}>驗證並儲存</button>
-          </div>
-          <small>到 Nexus 帳號的 API Keys 頁面取得個人金鑰（<button className="link" onClick={() => api.openExternal('https://next.nexusmods.com/settings/api-keys')}>開啟</button>）。金鑰會用 Windows 加密存在本機。</small>
-        </>
-      )}
-      <div className="row">
-        <span className="ns-status">nxm:// 連結：{st.nxmRegistered ? '由 ModHub 處理' : '未設定'}</span>
-        <button className="btn" disabled={busy} onClick={() => run(() => (st.nxmRegistered ? api.nxmUnregister() : api.nxmRegister()))}>
-          {st.nxmRegistered ? '取消處理' : '讓 ModHub 處理 nxm:// 連結'}
-        </button>
-      </div>
-      <small>免費會員在 Nexus 網頁按「Mod Manager Download」時，會用 nxm:// 連結交給 ModHub 下載。開啟後會取代 Vortex / MO2 的同一設定。</small>
-      {msg && <div className="error-text">{msg}</div>}
-    </div>
-  );
-}
-
-function Settings({ settings, onClose, onSave }) {
-  const [xxmiRoot, setXxmiRoot] = useState(settings.xxmiRoot);
-  const [qaqRoot, setQaqRoot] = useState(settings.qaqRoot);
-  const pick = async (set) => {
-    const p = await api.pickFolder();
-    if (p) set(p);
-  };
-  return (
-    <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>設定</h3>
-        <label>XXMI Launcher 資料夾
-          <div className="row"><input value={xxmiRoot} onChange={(e) => setXxmiRoot(e.target.value)} /><button className="btn" onClick={() => pick(setXxmiRoot)}>瀏覽</button></div>
-        </label>
-        <label>QAQ Manager 安裝資料夾（選填，用來辨識角色分類）
-          <div className="row"><input value={qaqRoot} onChange={(e) => setQaqRoot(e.target.value)} /><button className="btn" onClick={() => pick(setQaqRoot)}>瀏覽</button></div>
-        </label>
-        <NexusSettings />
-        <UpdateSettings />
-        <div className="row end">
-          <button className="btn ghost" onClick={onClose}>取消</button>
-          <button className="btn primary" onClick={() => onSave({ xxmiRoot, qaqRoot })}>儲存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------- 自動更新 ----------------
-function useUpdate() {
-  const [s, setS] = useState(null);
-  useEffect(() => {
-    api.updateState().then(setS).catch(() => {});
-    return api.onUpdateStatus(setS);
-  }, []);
-  return s;
-}
-
-/** 有新版時畫面右下角的提示 */
-function UpdateBar({ update, onHide }) {
-  if (!update || !['available', 'downloading', 'downloaded'].includes(update.status)) return null;
-  const portable = update.mode === 'portable';
-  return (
-    <div className="update-bar">
-      {update.status === 'available' && (
-        <>
-          <span>ModHub 有新版本 <b>v{update.latest}</b>（目前 v{update.version}）</span>
-          <button className="btn small primary" onClick={() => api.updateDownload()}>{portable ? '到下載頁面' : '下載更新'}</button>
-          <button className="link" onClick={onHide}>稍後</button>
-        </>
-      )}
-      {update.status === 'downloading' && <span>正在下載 v{update.latest}… {update.percent || 0}%</span>}
-      {update.status === 'downloaded' && (
-        <>
-          <span>v{update.latest} 已下載完成</span>
-          <button className="btn small primary" onClick={() => api.updateInstall()}>重新啟動並更新</button>
-          <button className="link" onClick={onHide} title="下次關閉 ModHub 時自動安裝">稍後</button>
-        </>
-      )}
-    </div>
-  );
-}
-
-const UPDATE_TEXT = {
-  idle: '', checking: '檢查中…', latest: '已是最新版本', dev: '開發模式不檢查更新',
-  available: '有新版本', downloading: '下載中…', downloaded: '已下載，重新啟動即可更新', error: '檢查失敗',
-};
-
-/** 設定視窗裡的版本與「檢查更新」 */
-function UpdateSettings() {
-  const s = useUpdate();
-  if (!s) return null;
-  return (
-    <div className="update-settings">
-      <b>版本</b>
-      <span>ModHub v{s.version}{s.mode === 'portable' ? '（免安裝版：有新版時請到下載頁面更新）' : s.mode === 'dev' ? '（開發模式）' : ''}</span>
-      <span className="card-meta">
-        {UPDATE_TEXT[s.status] || ''}
-        {s.latest && s.status !== 'latest' ? ` v${s.latest}` : ''}
-        {s.status === 'downloading' ? ` ${s.percent || 0}%` : ''}
-        {s.status === 'error' && s.error ? `：${s.error}` : ''}
-      </span>
-      <div className="row">
-        <button className="btn small" disabled={s.mode === 'dev' || s.status === 'checking' || s.status === 'downloading'} onClick={() => api.updateCheck()}>檢查更新</button>
-        {s.status === 'available' && <button className="btn small primary" onClick={() => api.updateDownload()}>{s.mode === 'portable' ? '到下載頁面' : '下載更新'}</button>}
-        {s.status === 'downloaded' && <button className="btn small primary" onClick={() => api.updateInstall()}>重新啟動並更新</button>}
-        <button className="link" onClick={() => api.updateOpenReleases()}>更新紀錄</button>
-      </div>
     </div>
   );
 }

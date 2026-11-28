@@ -12,6 +12,14 @@ contextBridge.exposeInMainWorld('modhub', {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   scan: (gameId) => ipcRenderer.invoke('mods:scan', gameId),
   onModsChanged: on('mods:changed'),
+
+  // 遊戲內疊加介面
+  overlayGetHotkey: () => ipcRenderer.invoke('overlay:getHotkey'),
+  overlaySetHotkey: (key) => ipcRenderer.invoke('overlay:setHotkey', key),
+  overlaySuspend: (on) => ipcRenderer.invoke('overlay:suspend', on),
+  overlayHide: () => ipcRenderer.invoke('overlay:hide'),
+  overlayOpenMain: () => ipcRenderer.invoke('overlay:openMain'),
+  onOverlayShow: on('overlay:show'),
   setEnabled: (gameId, modPath, enabled) => ipcRenderer.invoke('mods:setEnabled', gameId, modPath, enabled),
   trashMod: (gameId, modPath) => ipcRenderer.invoke('mods:trash', gameId, modPath),
   openPath: (gameId, p) => ipcRenderer.invoke('shell:open', gameId, p),
