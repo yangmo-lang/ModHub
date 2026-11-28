@@ -115,6 +115,9 @@ export default function Settings({ settings, onClose, onSave }) {
   const [qaqRoot, setQaqRoot] = useState(settings.qaqRoot);
   const [trayOnMinimize, setTrayOnMinimize] = useState(settings.trayOnMinimize ?? true);
   const [trayOnClose, setTrayOnClose] = useState(settings.trayOnClose ?? true);
+  const [effGameDir, setEffGameDir] = useState(settings.effGameDir || '');
+  const [effAuto, setEffAuto] = useState('');
+  useEffect(() => { api.effStatus().then((s) => setEffAuto(settings.effGameDir ? '' : s.gameDir || '')).catch(() => {}); }, [settings.effGameDir]);
   const pick = async (set) => {
     const p = await api.pickFolder();
     if (p) set(p);
@@ -129,6 +132,12 @@ export default function Settings({ settings, onClose, onSave }) {
         <label>QAQ Manager 安裝資料夾（選填，用來辨識角色分類）
           <div className="row"><input value={qaqRoot} onChange={(e) => setQaqRoot(e.target.value)} /><button className="btn" onClick={() => pick(setQaqRoot)}>瀏覽</button></div>
         </label>
+        <label>終末地遊戲資料夾（EFF 用，Endfield.exe 所在處；留空 = 使用 XXMI 的設定）
+          <div className="row">
+            <input value={effGameDir} placeholder={effAuto ? `自動：${effAuto}` : '例如 D:\\Hypergryph Launcher\\games\\Endfield Game'} onChange={(e) => setEffGameDir(e.target.value)} />
+            <button className="btn" onClick={() => pick(setEffGameDir)}>瀏覽</button>
+          </div>
+        </label>
         <OverlaySettings />
         <div className="update-settings">
           <b>系統匣</b>
@@ -140,7 +149,7 @@ export default function Settings({ settings, onClose, onSave }) {
         <UpdateSettings />
         <div className="row end">
           <button className="btn ghost" onClick={onClose}>取消</button>
-          <button className="btn primary" onClick={() => onSave({ xxmiRoot, qaqRoot, trayOnMinimize, trayOnClose })}>儲存</button>
+          <button className="btn primary" onClick={() => onSave({ xxmiRoot, qaqRoot, trayOnMinimize, trayOnClose, effGameDir: effGameDir.trim() })}>儲存</button>
         </div>
       </div>
     </div>
@@ -190,7 +199,15 @@ const UPDATE_TEXT = {
 /** 設定視窗裡的版本與「檢查更新」 */
 function UpdateSettings() {
   const s = useUpdate();
+  // 打開設定時，上次檢查太舊就自動重查（例如開著很久，期間有新版發布）
+  useEffect(() => { api.updateCheckIfStale().catch(() => {}); }, []);
   if (!s) return null;
+  const checked = s.checkedAt ? new Date(s.checkedAt) : null;
+  const checkedText = checked
+    ? (checked.toDateString() === new Date().toDateString()
+      ? checked.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : checked.toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
+    : '';
   return (
     <div className="update-settings">
       <b>版本</b>
@@ -198,8 +215,10 @@ function UpdateSettings() {
       <span className="card-meta">
         {UPDATE_TEXT[s.status] || ''}
         {s.latest && s.status !== 'latest' ? ` v${s.latest}` : ''}
+        {s.status === 'latest' && s.latest ? `（GitHub 最新為 v${s.latest}）` : ''}
         {s.status === 'downloading' ? ` ${s.percent || 0}%` : ''}
         {s.status === 'error' && s.error ? `：${s.error}` : ''}
+        {checkedText && s.status !== 'checking' ? ` · 上次檢查 ${checkedText}` : ''}
       </span>
       <div className="row">
         <button className="btn small" disabled={s.mode === 'dev' || s.status === 'checking' || s.status === 'downloading'} onClick={() => api.updateCheck()}>檢查更新</button>

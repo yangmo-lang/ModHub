@@ -109,7 +109,13 @@ function analyze(stagingDir) {
   // 多個獨立 MOD 包在一起：第一層有多個資料夾且各自含 ini
   const topDirs = fs.readdirSync(root, { withFileTypes: true }).filter((e) => e.isDirectory() && !JUNK.has(e.name.toLowerCase()));
   const variants = topDirs.filter((d) => listTree(path.join(root, d.name)).some((f) => lower(f).endsWith('.ini'))).map((d) => d.name);
+  // 終末地的 EFF MOD（mod.ini 有 [Mod] format=、*.effres）或 EFF 框架本體（plugin/eff.dll）
+  const effInfo = require('./eff.cjs').classifyFiles(files, (rel) => {
+    try { return fs.readFileSync(path.join(root, rel), 'utf8').slice(0, 4096); } catch { return ''; }
+  });
   return {
+    effMod: effInfo.effMod,
+    effFramework: effInfo.framework,
     root,
     rootName: path.basename(root),
     fileCount: files.length,

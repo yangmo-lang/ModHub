@@ -270,5 +270,6 @@ module.exports = {
   isDisabledName,
   cleanName,
   findCover,
+  findPreviewDeep,
   assertInside,
 };

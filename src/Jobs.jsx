@@ -34,7 +34,7 @@ export function JobsPanel({ jobs, onInstall, onDismiss, gameNames }) {
                 {j.error && <div className="error-text">{j.error}</div>}
                 <div className="job-actions">
                   {j.status === 'ready' && <button className="link" onClick={() => onInstall(j)}>安裝…</button>}
-                  {j.status === 'done' && <button className="link" onClick={() => api.openPath(j.gameId, j.installedPath)}>開啟資料夾</button>}
+                  {j.status === 'done' && <button className="link" onClick={() => api.openPath(j.installedLoader === 'eff' ? 'EFF' : j.gameId, j.installedPath)}>開啟資料夾</button>}
                   <button className="link" onClick={() => onDismiss(j)}>
                     {['downloading', 'verifying', 'queued'].includes(j.status) ? '取消' : '移除'}
                   </button>
@@ -58,6 +58,11 @@ export function InstallDialog({ job, characters, categories, onClose, onDone }) 
   const [excludeExec, setExcludeExec] = useState(true);
   const [replace, setReplace] = useState(Boolean(job.replacePath));
   const [disableOthers, setDisableOthers] = useState(false);
+  // 終末地的 EFF MOD：每次問要裝到 EFF 還是 XXMI（取代既有版本時預設沿用原本的位置）
+  const askLoader = job.gameId === 'EFMI' && a.effMod;
+  const [loader, setLoader] = useState(askLoader ? (job.replaceLoader === 'eff' ? 'eff' : '') : 'xxmi');
+  const toEff = loader === 'eff';
+  const replaceMatches = Boolean(job.replacePath) && (job.replaceLoader === 'eff') === toEff;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -66,8 +71,9 @@ export function InstallDialog({ job, characters, categories, onClose, onDone }) 
   const submit = async () => {
     setBusy(true);
     setErr('');
-    const opts = { folderName, excludeExecutables: excludeExec, replace, disableOthers };
-    if (target.startsWith('char:')) opts.charId = target.slice(5);
+    const opts = { folderName, excludeExecutables: excludeExec, replace: replace && replaceMatches, disableOthers: disableOthers && !toEff };
+    if (toEff) opts.loader = 'eff';
+    else if (target.startsWith('char:')) opts.charId = target.slice(5);
     else if (target.startsWith('cat:')) opts.categoryName = target.slice(4);
     try {
       const p = await api.installJob(job.id, opts);
@@ -84,7 +90,8 @@ export function InstallDialog({ job, characters, categories, onClose, onDone }) 
         <h3>安裝：{job.title}</h3>
         <div className="analysis">
           <span>{a.fileCount} 個檔案 · {fmtSize(a.totalSize)} · {a.iniCount} 個 ini</span>
-          {a.iniCount === 0 && <div className="warn-box">找不到任何 .ini，這可能不是 3DMigoto MOD（或需要再解壓一層）。</div>}
+          {a.effFramework && <div className="warn-box">這是 EFF 框架本體（plugin/eff.dll），不是 MOD。請到終末地「本機 MOD → EFF」按「安裝 EFF / 更新」。</div>}
+          {a.iniCount === 0 && !a.effMod && <div className="warn-box">找不到任何 .ini，這可能不是 3DMigoto MOD（或需要再解壓一層）。</div>}
           {a.nestedArchives.length > 0 && <div className="warn-box">裡面還有壓縮檔：{a.nestedArchives.slice(0, 4).join('、')}{a.nestedArchives.length > 4 ? '…' : ''}。可能是多個版本，需要自己解壓挑選。</div>}
           {a.variants.length > 1 && <div className="info-box">包含 {a.variants.length} 個子 MOD：{a.variants.slice(0, 6).join('、')}{a.variants.length > 6 ? '…' : ''}（會一起安裝，可再用「只用這個」挑選）。</div>}
           {a.executables.length > 0 && (
@@ -95,7 +102,14 @@ export function InstallDialog({ job, characters, categories, onClose, onDone }) 
           )}
         </div>
 
-        <label>放到哪個分類
+        {askLoader && (
+          <div className="loader-pick">
+            <div className="info-box">這是 EFF（Endfield Framework）格式的 MOD（mod.ini 有 [Mod] format=、*.effres），要裝到哪裡？</div>
+            <label className="check"><input type="radio" name="loader" checked={loader === 'eff'} onChange={() => setLoader('eff')} />EFF：遊戲資料夾的 plugin\mods（需要已安裝 EFF）</label>
+            <label className="check"><input type="radio" name="loader" checked={loader === 'xxmi'} onChange={() => setLoader('xxmi')} />XXMI：EFMI\Mods（一般 3DMigoto MOD 的位置）</label>
+          </div>
+        )}
+        {!toEff && <label>放到哪個分類
           <select className="sel wide" value={target} onChange={(e) => setTarget(e.target.value)}>
             <option value="">不分類（直接放在 Mods）</option>
             <optgroup label="角色">
@@ -107,20 +121,21 @@ export function InstallDialog({ job, characters, categories, onClose, onDone }) 
               </optgroup>
             )}
           </select>
-        </label>
+        </label>}
+        {toEff && <div className="card-meta">EFF 依 MOD 內容判斷角色，直接放在 plugin\mods\&lt;資料夾名稱&gt;。</div>}
         <label>MOD 資料夾名稱
           <input className="search" value={folderName} onChange={(e) => setFolderName(e.target.value)} />
         </label>
-        {job.replacePath && (
+        {replaceMatches && (
           <label className="check"><input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />取代已安裝的舊版本（舊版會備份，不會直接刪除）</label>
         )}
-        {target && (
+        {target && !toEff && (
           <label className="check"><input type="checkbox" checked={disableOthers} onChange={(e) => setDisableOthers(e.target.checked)} />停用同分類的其他 MOD（一角一皮）</label>
         )}
         {err && <div className="error-text">{err}</div>}
         <div className="row end">
           <button className="btn ghost" onClick={onClose} disabled={busy}>稍後</button>
-          <button className="btn primary" onClick={submit} disabled={busy || !folderName.trim()}>{busy ? '安裝中…' : '安裝'}</button>
+          <button className="btn primary" onClick={submit} disabled={busy || !folderName.trim() || !loader || a.effFramework}>{busy ? '安裝中…' : '安裝'}</button>
         </div>
       </div>
     </div>

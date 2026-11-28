@@ -40,6 +40,8 @@ const { createModsWatcher } = require('./watcher.cjs');
 const overlayMod = require('./overlay.cjs');
 const trayMod = require('./tray.cjs');
 const maps = require('./maps.cjs');
+const eff = require('./eff.cjs');
+const effMain = require('./eff-main.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -81,9 +83,19 @@ function gameLogo(gameId) {
   return fs.existsSync(f) ? f : null;
 }
 
+// 終末地的 EFF：MOD 在遊戲資料夾的 plugin/mods（停用的在 plugin/mods_disabled）
+const effGameDir = () => eff.resolveGameDir(settings);
+function effRoots() {
+  const dir = effGameDir();
+  if (!dir) return [];
+  const p = eff.effPaths(dir);
+  return [p.mods, p.disabled];
+}
+
 function allModsRoots() {
   return [
     ...config.GAMES.map((g) => config.modsDirFor(settings, g.id)),
+    ...effRoots(),
     path.join(app.getPath('userData'), 'characters'),
     tilesDir(),
   ];
@@ -159,7 +171,7 @@ app.whenReady().then(() => {
   }));
 
   // 介面只能改這些設定；金鑰等由專用 IPC 處理
-  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose']);
+  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir']);
   ipcMain.handle('settings:save', (_e, patch) => {
     const clean = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => RENDERER_KEYS.has(k)));
     settings = { ...settings, ...clean };
@@ -236,6 +248,16 @@ app.whenReady().then(() => {
     },
     modsDirFor: (gameId) => config.modsDirFor(settings, gameById(gameId).id),
     matcherFor,
+    effGameDir,
+  });
+
+  // ---- EFF 框架本體：狀態、一鍵安裝 / 更新 ----
+  effMain.register(ipcMain, {
+    getSettings: () => settings,
+    userData: () => app.getPath('userData'),
+    dialog,
+    BrowserWindow,
+    emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
   handleNxm = onlineApi.handleNxm;
   for (const l of pendingNxm.splice(0)) handleNxm(l);
@@ -258,7 +280,32 @@ app.whenReady().then(() => {
   });
   app.on('will-quit', () => modsWatcher.stop());
 
+  // 終末地 EFF 的 MOD（gameId = 'EFF'）：角色資料沿用終末地
+  function scanEffMods() {
+    const dir = effGameDir();
+    const st = eff.status(dir);
+    const { c, guessCharacter } = matcherFor('EFMI');
+    const base = {
+      loader: 'eff',
+      eff: st,
+      modsDir: st.modsDir || '',
+      allCharacters: c ? c.data.characters.map((x) => ({ id: x.id, name: x.name, nameTw: x.nameTw, en: x.en, avatar: x.avatar || null, meta: x.meta || {} })) : [],
+      charDb: c ? { version: c.data.version, source: c.data.source, roleLabel: c.data.roleLabel, syncedAt: c.data.syncedAt, count: c.data.characters.length } : null,
+      charDbSupported: false, // 同步圖鑑在 XXMI 那邊做
+    };
+    if (!st.gameFound || !fs.existsSync(eff.effPaths(dir).plugin)) {
+      modsWatcher.stop();
+      return { ...base, missing: true, categories: [], mods: [] };
+    }
+    modsWatcher.set(eff.EFF_ID, eff.effPaths(dir).plugin); // 一次監看 mods 與 mods_disabled
+    const result = eff.scanEff(dir, { characters: c?.data.characters, guessCharacter: c ? guessCharacter : null });
+    for (const cat of result.categories) cat.displayName = cat.character ? cat.character.nameTw : chars.toTw(cat.name);
+    for (const m of result.mods) m.categoryTw = m.character ? m.character.nameTw : chars.toTw(m.category);
+    return { ...base, ...result };
+  }
+
   ipcMain.handle('mods:scan', (_e, gameId) => {
+    if (gameId === eff.EFF_ID) return scanEffMods();
     gameById(gameId);
     const modsDir = config.modsDirFor(settings, gameId);
     if (!fs.existsSync(modsDir)) { modsWatcher.stop(); return { modsDir, missing: true, categories: [], mods: [] }; }
@@ -337,6 +384,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('mods:setEnabled', (_e, gameId, modPath, enabled) => {
+    if (gameId === eff.EFF_ID) return eff.setEnabled(effGameDir(), modPath, Boolean(enabled));
     const root = config.modsDirFor(settings, gameById(gameId).id);
     return scanner.setModEnabled(root, modPath, enabled);
   });
@@ -398,8 +446,8 @@ app.whenReady().then(() => {
 
   // 刪除 MOD：確認後移到資源回收筒（不做永久刪除）
   ipcMain.handle('mods:trash', async (e, gameId, modPath) => {
-    const root = config.modsDirFor(settings, gameById(gameId).id);
-    scanner.assertInside(root, modPath);
+    if (gameId === eff.EFF_ID) eff.locate(effGameDir(), modPath);
+    else scanner.assertInside(config.modsDirFor(settings, gameById(gameId).id), modPath);
     if (!fs.statSync(modPath).isDirectory()) throw new Error('這不是 MOD 資料夾');
     const name = path.basename(modPath).replace(/^DISABLED_/i, '');
     const r = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender), {
@@ -420,6 +468,13 @@ ${modPath}`,
   });
 
   ipcMain.handle('shell:open', (_e, gameId, p) => {
+    if (gameId === eff.EFF_ID) {
+      // EFF：plugin/mods、plugin/mods_disabled 本身或裡面的 MOD
+      const roots = effRoots();
+      if (roots.some((r) => path.resolve(r) === path.resolve(p))) fs.mkdirSync(p, { recursive: true });
+      else eff.locate(effGameDir(), p);
+      return shell.openPath(p);
+    }
     const root = config.modsDirFor(settings, gameById(gameId).id);
     if (path.resolve(p) !== path.resolve(root)) scanner.assertInside(root, p);
     return shell.openPath(p);

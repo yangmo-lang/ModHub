@@ -23,6 +23,7 @@ npm test         # 掃描/切換邏輯單元測試
 - 「刪除」：確認後把 MOD 資料夾移到資源回收筒（可還原）；同角色多個 MOD 同時啟用時分類旁顯示警告
 - 搜尋、啟用狀態篩選、預覽圖、在檔案總管開啟
 - 自動監看 Mods 資料夾：在檔案總管新增 / 刪除 / 改名 MOD 後清單自動更新（`electron/watcher.cjs`）
+- 程式更新：啟動後檢查一次 GitHub Releases，之後每 4 小時重查；打開「設定」時上次檢查超過 30 分鐘也會重查，並顯示上次檢查時間
 
 ### 透過 XXMI 啟動遊戲
 
@@ -163,6 +164,23 @@ npm test         # 掃描/切換邏輯單元測試
   畫面上標示來源、授權與變更（名稱轉繁體，藍圖碼不改）。讀取失敗時顯示上次的快取，並在畫面上說明原因
 - 一圖流改版的因應：解析不依賴固定排版（欄位順序、型別註記、陣列寫法改變都能讀）；預設位置讀不到時，
   先試上次成功的位置，再列出 repo 檔案樹找含 `blueprint` 的檔案（`aic/` 優先），找到就改讀新位置並在畫面上標示
+
+### 終末地 EFF（Endfield Framework）
+
+[EFF](https://github.com/ssice-a/EFF)（[GameBanana](https://gamebanana.com/tools/24565)）是終末地另一套 MOD 載入框架，
+裝在遊戲資料夾（`Endfield.exe` 旁），MOD 放在 `plugin\mods\<MOD>\`（`mod.ini` 有 `[Mod] format=`、`*.effres`），和 XXMI 分開管理。
+
+- 終末地「本機 MOD」左上角切換 **XXMI / EFF**；EFF 沿用同一套卡片、搜尋、啟用 / 停用、刪除到資源回收筒
+- 角色分組依 MOD 內容判斷（`mod.ini` 裡替換目標 `target.path=…/actor/<類型>/<代號>/`，例如 `laevat` → 萊萬汀）
+- 停用：EFF 會讀取 `plugin\mods` 底下所有資料夾、不認 `DISABLED_` 前綴，所以停用是把整個 MOD 資料夾移到
+  `plugin\mods_disabled\`（相對路徑與 `state.ini` 一起移動），啟用再移回來；遊戲內按 F10 重新載入
+- 遊戲資料夾：預設讀 XXMI 設定裡終末地的 `game_folder`，可在「設定」另外指定
+- 安裝 / 更新 EFF 本體：從 GitHub Releases 下載 `EFF_v<版本>_dll.zip`，比對 GitHub 提供的 SHA-256，
+  檢查內容只有 `d3dcompiler_47.dll`、`vulkan-1.dll` 與 `plugin\`，遊戲執行中會拒絕；
+  被覆蓋的舊檔先備份到 `%APPDATA%\modhub\backups\eff\`，保留使用者的 `plugin\eff.ini` 與所有 MOD。版本從 `eff.dll` 的版本資源讀取
+- 從壓縮檔 / 線上下載安裝時偵測到 EFF MOD，安裝視窗會問要裝到 EFF（`plugin\mods`）還是 XXMI；
+  若壓縮檔其實是 EFF 本體會提示改用「安裝 EFF」
+- EFF 為 AGPL-3.0：ModHub 不內含也不複製它的程式碼，只依公開文件與檔案結構相容，框架本體在使用者要求時才從官方 Releases 下載
 
 ### 終末地互動地圖
 

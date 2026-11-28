@@ -16,13 +16,15 @@ export default function ModCard({ m, busy, uncategorized, suggestedName, onToggl
       </div>
       <div className="card-body">
         <div className="card-title" title={m.folderName}>{m.name}</div>
-        <div className="card-meta">{m.iniCount} 個 ini · {new Date(m.mtime).toLocaleDateString()}</div>
+        <div className="card-meta">
+          {m.loader === 'eff' ? `EFF${m.effFormat ? ` 格式 ${m.effFormat}` : ''}${m.effId ? ` · id ${m.effId}` : ''}` : `${m.iniCount} 個 ini`} · {new Date(m.mtime).toLocaleDateString()}
+        </div>
         <div className="card-actions">
           <label className="switch" title={m.enabled ? '點擊停用' : '點擊啟用'}>
             <input type="checkbox" checked={m.enabled} onChange={onToggle} disabled={busy} />
             <span />
           </label>
-          <button className="link" onClick={onPick} disabled={busy} title="移到其他角色或分類資料夾">{uncategorized ? '移入…' : '移動…'}</button>
+          {onPick && <button className="link" onClick={onPick} disabled={busy} title="移到其他角色或分類資料夾">{uncategorized ? '移入…' : '移動…'}</button>}
           <button className="link" onClick={onOpen} title="在檔案總管開啟">開啟</button>
           <button className="link danger" onClick={onTrash} disabled={busy} title="移到資源回收筒（可從資源回收筒還原）">刪除</button>
         </div>

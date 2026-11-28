@@ -5,6 +5,7 @@ import Blueprint from './Blueprint.jsx';
 import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
 import MapView from './MapView.jsx';
+import EffBar from './EffBar.jsx';
 import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 import Picker from './Picker.jsx';
@@ -14,6 +15,7 @@ import { api, img, errText, metaLine, Avatar } from './common.jsx';
 
 const ALL = '__all__';
 const UNCAT = '未分類';
+const LOADER_KEY = 'modhub.efmiLoader';
 const SOURCE_LABEL = { 'nanoka.cc': 'nanoka', 'wiki.skland.com': '森空島 wiki' };
 
 function useToast() {
@@ -105,6 +107,13 @@ export default function App() {
   const autoSynced = useRef(new Set());
   const gameRef = useRef(null);
   gameRef.current = gameId;
+  // 終末地的 MOD 載入方式：XXMI（EFMI\Mods）或 EFF（遊戲資料夾 plugin\mods），本機 MOD 頁上方切換
+  const [loader, setLoaderState] = useState(() => localStorage.getItem(LOADER_KEY) || 'xxmi');
+  const setLoader = (l) => { setLoaderState(l); localStorage.setItem(LOADER_KEY, l); };
+  const scanId = gameId === 'EFMI' && loader === 'eff' ? 'EFF' : gameId; // 主程序用 'EFF' 代表終末地的 EFF
+  const isEff = scanId === 'EFF';
+  const scanRef = useRef(null);
+  scanRef.current = scanId;
 
   useEffect(
     () => api.onCharProgress((p) => {
@@ -126,25 +135,36 @@ export default function App() {
   // 一律掃描「目前」選中的遊戲；切換遊戲後才回來的舊結果直接丟掉
   // silent：資料夾自動監看觸發的掃描，不顯示「掃描中」也不跳錯誤提示
   const rescan = useCallback(async (opts) => {
+    const s = scanRef.current;
     const g = gameRef.current;
-    if (!g) return;
+    if (!s) return;
     const silent = opts?.silent === true;
     if (!silent) setBusy(true);
     try {
-      const d = await api.scan(g);
-      if (g === gameRef.current) setData({ ...d, gameId: g });
+      const d = await api.scan(s);
+      if (s === scanRef.current) setData({ ...d, gameId: g, scanId: s });
     } catch (e) {
-      if (g === gameRef.current && !silent) showToast(errText(e), 'error');
+      if (s === scanRef.current && !silent) showToast(errText(e), 'error');
     } finally {
-      if (g === gameRef.current && !silent) setBusy(false);
+      if (s === scanRef.current && !silent) setBusy(false);
     }
   }, [showToast]);
 
   // 在檔案總管新增 / 刪除 / 改名 MOD 後自動更新清單
   useEffect(
-    () => api.onModsChanged(({ gameId: g }) => { if (g === gameRef.current) rescan({ silent: true }); }),
+    () => api.onModsChanged(({ gameId: g }) => { if (g === scanRef.current) rescan({ silent: true }); }),
     [rescan],
   );
+
+  // 終末地切換 XXMI / EFF
+  const firstLoader = useRef(true);
+  useEffect(() => {
+    if (firstLoader.current) { firstLoader.current = false; return; }
+    if (gameRef.current !== 'EFMI') return;
+    setCategory(ALL);
+    setData({ categories: [], mods: [] });
+    rescan();
+  }, [loader]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setCategory(ALL);
@@ -252,11 +272,11 @@ export default function App() {
     }
   };
 
-  const toggle = (m) => act(() => api.setEnabled(gameId, m.path, !m.enabled), `${m.enabled ? '已停用' : '已啟用'}：${m.name}（遊戲內按 F10 重新載入）`);
+  const toggle = (m) => act(() => api.setEnabled(scanId, m.path, !m.enabled), `${m.enabled ? '已停用' : '已啟用'}：${m.name}（遊戲內按 F10 重新載入）`);
   // 刪除 = 移到資源回收筒（主程序會先跳確認視窗）；按取消就不顯示訊息
   const trash = async (m) => {
     let ok = false;
-    await act(async () => { ok = await api.trashMod(gameId, m.path); });
+    await act(async () => { ok = await api.trashMod(scanId, m.path); });
     if (ok) showToast(`已將「${m.name}」移到資源回收筒`);
   };
   const createCat = (c) => act(() => api.createCategory(gameId, c.id), `已建立角色資料夾：${c.nameTw}`);
@@ -317,7 +337,7 @@ export default function App() {
         <small>{c.enabled}/{c.total}{c.character ? ` · ${metaLine(c.character.meta) || c.character.en}` : ''}</small>
       </div>
       {c.enabled > 1 && c.character && <span className="warn" title="同一角色啟用了多個 MOD，可能互相衝突">!</span>}
-      {!c.virtual && data.charDb && (
+      {!c.virtual && !c.grouped && data.charDb && (
         <button className="edit" title="手動對應角色" onClick={(e) => { e.stopPropagation(); setPicker({ mode: 'map', category: c }); }}>✎</button>
       )}
     </div>
@@ -349,6 +369,12 @@ export default function App() {
       <aside className="cats">
         <div className="cats-head">
           <h2>{game?.name}</h2>
+          {gameId === 'EFMI' && (
+            <div className="seg loader-seg" title="終末地有兩種 MOD 載入方式，各自管理">
+              <button className={!isEff ? 'active' : ''} onClick={() => setLoader('xxmi')}>XXMI</button>
+              <button className={isEff ? 'active' : ''} onClick={() => setLoader('eff')}>EFF</button>
+            </div>
+          )}
           <p>{data.mods.length} 個 MOD · {totalOn} 個啟用</p>
           {data.charDbSupported && (
             <div className="chardb">
@@ -463,12 +489,16 @@ export default function App() {
             ))}
           </div>
           <button className="btn" onClick={rescan} disabled={busy}>{busy ? '掃描中…' : '↻ 重新掃描'}</button>
-          {!data.missing && data.modsDir && <button className="btn" onClick={() => setShowPresets(true)} disabled={busy} title="儲存或切換一組 MOD 的啟用狀態">🗂 預設組合</button>}
-          {data.modsDir && <button className="btn" onClick={() => api.openPath(gameId, data.modsDir)}>📂 Mods 資料夾</button>}
+          {!isEff && !data.missing && data.modsDir && <button className="btn" onClick={() => setShowPresets(true)} disabled={busy} title="儲存或切換一組 MOD 的啟用狀態">🗂 預設組合</button>}
+          {data.modsDir && !data.missing && <button className="btn" onClick={() => api.openPath(scanId, data.modsDir)}>📂 Mods 資料夾</button>}
         </header>
 
+        {isEff && <EffBar eff={data.eff} showToast={showToast} onChanged={rescan} onSettings={() => setShowSettings(true)} />}
+
         {data.missing ? (
-          <div className="empty">找不到 Mods 資料夾：<code>{data.modsDir}</code><br />請到「設定」確認 XXMI Launcher 路徑。</div>
+          isEff
+            ? <div className="empty">找不到終末地的遊戲資料夾{data.eff?.gameDir ? <>：<code>{data.eff.gameDir}</code></> : ''}<br />請到「設定」指定 EFF 遊戲資料夾（Endfield.exe 所在的資料夾）。</div>
+            : <div className="empty">找不到 Mods 資料夾：<code>{data.modsDir}</code><br />請到「設定」確認 XXMI Launcher 路徑。</div>
         ) : visibleMods.length === 0 ? (
           <div className="empty">{busy ? '掃描中…' : '沒有符合條件的 MOD'}</div>
         ) : (
@@ -478,8 +508,8 @@ export default function App() {
                 suggestedName={m.suggestedCategory && (data.allCharacters?.find((c) => c.id === m.suggestedCharId)?.nameTw || m.suggestedCategory)}
                 onToggle={() => toggle(m)}
                 onMoveSuggested={() => moveMod(m, { charId: m.suggestedCharId }, m.suggestedCategory)}
-                onPick={() => setPicker({ mode: 'move', mod: m })}
-                onOpen={() => api.openPath(gameId, m.path)}
+                onPick={isEff ? null : () => setPicker({ mode: 'move', mod: m })}
+                onOpen={() => api.openPath(scanId, m.path)}
                 onTrash={() => trash(m)} />
             ))}
           </div>

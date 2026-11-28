@@ -8,6 +8,7 @@ const nx = require('./sources/nexus.cjs');
 const net = require('./net.cjs');
 const installer = require('./installer.cjs');
 const scanner = require('./scanner.cjs');
+const eff = require('./eff.cjs');
 const translator = require('./translate.cjs');
 
 const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com|(hsr|ww|zzz)\.nanoka\.cc|wiki\.skland\.com|www\.skland\.com|ef\.yituliu\.cn|cos\.yituliu\.cn|github\.com|creativecommons\.org|www\.bilibili\.com|bannerhistory\.app|wiki\.biligame\.com|www\.zmdmap\.com)\//i;
@@ -72,6 +73,13 @@ function register(ipcMain, ctx) {
     if (!fs.existsSync(root)) return idx;
     for (const m of scanner.scanMods(root).mods) {
       if (m.origin) idx.set(`${m.origin.source}:${m.origin.modId}`, { path: m.path, name: m.name, category: m.category, ...m.origin });
+    }
+    // 終末地：裝在 EFF 的 MOD 也算已安裝（更新時取代那一份）
+    const effDir = gameId === 'EFMI' ? ctx.effGameDir?.() : '';
+    if (effDir) {
+      for (const m of eff.scanEff(effDir).mods) {
+        if (m.origin) idx.set(`${m.origin.source}:${m.origin.modId}`, { path: m.path, name: m.name, category: m.category, loader: 'eff', ...m.origin });
+      }
     }
     return idx;
   }
@@ -181,7 +189,7 @@ function register(ipcMain, ctx) {
     const inst = installedIndex(gameId).get(`${source}:${d.id}`);
     const base = {
       gameId, source, modId: d.id, fileId: f.id, title: d.name, fileName: f.name, total: f.size,
-      thumb: d.thumb, suggest: suggestFor(gameId, d.category, d.name), replacePath: inst?.path || null,
+      thumb: d.thumb, suggest: suggestFor(gameId, d.category, d.name), replacePath: inst?.path || null, replaceLoader: inst?.loader || null,
       meta: { source, modId: d.id, fileId: f.id, name: d.name, version: f.version || d.version, url: d.url, updatedAt: d.updatedAt, fileName: f.name },
     };
     if (source === 'gamebanana') {
@@ -221,7 +229,7 @@ function register(ipcMain, ctx) {
     const j = newJob({
       gameId, source: 'nexus', modId: n.modId, fileId: n.fileId, title: d?.name || `Nexus #${n.modId}`,
       fileName: `${n.modId}-${n.fileId}.zip`, total: f?.size || 0, thumb: d?.thumb || null,
-      suggest: d ? suggestFor(gameId, d.category, d.name) : null, replacePath: inst?.path || null,
+      suggest: d ? suggestFor(gameId, d.category, d.name) : null, replacePath: inst?.path || null, replaceLoader: inst?.loader || null,
       meta: { source: 'nexus', modId: n.modId, fileId: n.fileId, name: d?.name || '', version: f?.version || '', url: d?.url || '', updatedAt: d?.updatedAt || 0 },
     });
     prepare(j, async () => {
@@ -272,6 +280,8 @@ function register(ipcMain, ctx) {
   ipcMain.handle('jobs:install', async (_e, id, opts) => {
     const j = jobs.get(id);
     if (!j || j.status !== 'ready') throw new Error('這個項目還不能安裝');
+    if (j.analysis?.effFramework) throw new Error('這是 EFF 框架本體，不是 MOD；請到終末地「本機 MOD → EFF」用「安裝 / 更新 EFF」');
+    if (opts.loader === 'eff') return installEff(j, opts);
     const root = ctx.modsDirFor(j.gameId);
     update(j, { status: 'installing' });
     try {
@@ -315,6 +325,43 @@ function register(ipcMain, ctx) {
       throw e;
     }
   });
+
+  /** 終末地的 EFF MOD：直接放到 <遊戲>/plugin/mods/<資料夾>（EFF 依內容判斷角色，不用分類資料夾） */
+  async function installEff(j, opts) {
+    if (j.gameId !== 'EFMI') throw new Error('只有終末地支援 EFF');
+    const dir = ctx.effGameDir?.();
+    const st = dir ? eff.status(dir) : null;
+    if (!st?.gameFound) throw new Error('找不到終末地的遊戲資料夾，請到「設定」指定 EFF 遊戲資料夾');
+    if (!st.installed) throw new Error('這台電腦還沒安裝 EFF，請先到「本機 MOD → EFF」安裝 EFF');
+    const p = eff.effPaths(dir);
+    update(j, { status: 'installing' });
+    try {
+      fs.mkdirSync(p.mods, { recursive: true });
+      const folderName = installer.sanitizeEntryPath(opts.folderName || j.analysis.rootName).split(path.sep).pop();
+      const replacePath = opts.replace && j.replacePath && eff.scanEff(dir).mods.some((m) => m.path === j.replacePath) ? j.replacePath : null;
+      // 不取代時先挑一個在 mods 與 mods_disabled 都沒用過的名稱
+      const categoryDir = p.mods;
+      const target = installer.install({
+        modsRoot: p.plugin, // 取代的舊版可能在 mods_disabled（停用中），兩邊都在 plugin 底下
+        categoryDir,
+        analysis: j.analysis,
+        folderName: replacePath ? folderName : path.basename(eff.uniqueModTarget(dir, folderName)),
+        excludeExecutables: opts.excludeExecutables !== false,
+        replacePath,
+        backupDir: path.join(dirs().backups, 'EFF'),
+        meta: j.meta,
+      });
+      if (!j.analysis.hasImage && j.thumb) {
+        try { await net.download(j.thumb, path.join(target, `preview${path.extname(new URL(j.thumb).pathname) || '.jpg'}`)); } catch {}
+      }
+      cleanup(j);
+      update(j, { status: 'done', installedPath: target, installedLoader: 'eff' });
+      return target;
+    } catch (e) {
+      update(j, { status: 'ready', error: e.message });
+      throw e;
+    }
+  }
 
   // 啟動時清掉上次殘留的暫存
   try { fs.rmSync(dirs().staging, { recursive: true, force: true }); fs.rmSync(dirs().downloads, { recursive: true, force: true }); } catch {}

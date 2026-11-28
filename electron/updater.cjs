@@ -8,6 +8,18 @@ const electron = () => require('electron');
 
 const REPO = 'yangmo-lang/ModHub';
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
+const RECHECK_EVERY = 4 * 60 * 60 * 1000; // 程式一直開著（或在系統匣）時，每 4 小時重新檢查
+const RECHECK_TICK = 30 * 60 * 1000;
+const SETTINGS_MAX_AGE = 30 * 60 * 1000; // 打開設定時，上次檢查超過 30 分鐘就重查
+
+/**
+ * 是否該重新檢查：從沒檢查過、或上次檢查超過 maxAge；檢查中 / 下載中 / 已下載時不重查
+ * @param state { status, checkedAt }
+ */
+function shouldRecheck(state, now, maxAge) {
+  if (['dev', 'checking', 'downloading', 'downloaded'].includes(state.status)) return false;
+  return !state.checkedAt || now - state.checkedAt >= maxAge;
+}
 
 /** 版本比較：'0.1.10' > '0.1.9' */
 function newer(a, b) {
@@ -30,6 +42,7 @@ function register(ipcMain, { emit }) {
   const { app, shell } = electron();
   let state = { mode: mode(), version: app.getVersion(), status: 'idle' };
   const set = (patch) => { state = { ...state, ...patch }; emit('update:status', state); return state; };
+  const done = (patch) => set({ ...patch, checkedAt: Date.now() }); // 一次檢查結束（有結果或失敗）
 
   let updater = null;
   if (state.mode === 'installer') {
@@ -37,18 +50,18 @@ function register(ipcMain, { emit }) {
     updater.autoDownload = false;          // 使用者同意才下載
     updater.autoInstallOnAppQuit = true;   // 已下載的更新在關閉程式時安裝
     updater.on('checking-for-update', () => set({ status: 'checking', error: null }));
-    updater.on('update-available', (info) => set({ status: 'available', latest: info.version, notes: info.releaseNotes || null }));
-    updater.on('update-not-available', (info) => set({ status: 'latest', latest: info.version }));
+    updater.on('update-available', (info) => done({ status: 'available', latest: info.version, notes: info.releaseNotes || null }));
+    updater.on('update-not-available', (info) => done({ status: 'latest', latest: info.version }));
     updater.on('download-progress', (p) => set({ status: 'downloading', percent: Math.round(p.percent || 0) }));
     updater.on('update-downloaded', (info) => set({ status: 'downloaded', latest: info.version, percent: 100 }));
-    updater.on('error', (e) => set({ status: 'error', error: String(e?.message || e).split('\n')[0] }));
+    updater.on('error', (e) => done({ status: 'error', error: String(e?.message || e).split('\n')[0] }));
   }
 
   async function check() {
     if (state.mode === 'dev') return set({ status: 'dev' });
     if (state.mode === 'installer') {
       if (['downloading', 'downloaded'].includes(state.status)) return state;
-      try { await updater.checkForUpdates(); } catch (e) { set({ status: 'error', error: String(e?.message || e).split('\n')[0] }); }
+      try { await updater.checkForUpdates(); } catch (e) { done({ status: 'error', error: String(e?.message || e).split('\n')[0] }); }
       return state;
     }
     // portable：只查最新版號
@@ -58,14 +71,16 @@ function register(ipcMain, { emit }) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
       const latest = String(j.tag_name || '').replace(/^v/, '');
-      return set(newer(latest, state.version) ? { status: 'available', latest } : { status: 'latest', latest });
+      return done(newer(latest, state.version) ? { status: 'available', latest } : { status: 'latest', latest });
     } catch (e) {
-      return set({ status: 'error', error: e.message });
+      return done({ status: 'error', error: e.message });
     }
   }
 
   ipcMain.handle('update:state', () => state);
   ipcMain.handle('update:check', () => check());
+  // 打開設定時呼叫：結果太舊才重查，否則直接回傳目前狀態
+  ipcMain.handle('update:checkIfStale', () => (shouldRecheck(state, Date.now(), SETTINGS_MAX_AGE) ? check() : state));
   ipcMain.handle('update:download', async () => {
     if (state.mode !== 'installer') { shell.openExternal(RELEASES_PAGE); return state; }
     if (state.status !== 'available') return state;
@@ -84,7 +99,11 @@ function register(ipcMain, { emit }) {
   ipcMain.handle('update:openReleases', () => shell.openExternal(RELEASES_PAGE));
 
   // 啟動後稍等再檢查，不拖慢開啟速度
-  if (state.mode !== 'dev') setTimeout(() => { check(); }, 5000);
+  if (state.mode !== 'dev') {
+    setTimeout(() => { check(); }, 5000);
+    // 一直開著（或縮在系統匣）也會發現新版本
+    setInterval(() => { if (shouldRecheck(state, Date.now(), RECHECK_EVERY)) check(); }, RECHECK_TICK);
+  }
 }
 
-module.exports = { register, newer, RELEASES_PAGE };
+module.exports = { register, newer, shouldRecheck, RELEASES_PAGE, RECHECK_EVERY, SETTINGS_MAX_AGE };
