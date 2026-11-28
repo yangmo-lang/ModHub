@@ -44,6 +44,9 @@ const eff = require('./eff.cjs');
 const effMain = require('./eff-main.cjs');
 const keybinds = require('./keybinds.cjs');
 const onedragonMain = require('./onedragon-main.cjs');
+const maaendMain = require('./maaend-main.cjs');
+const elevated = require('./elevated.cjs');
+const elevatedMain = require('./elevated-main.cjs');
 const keyCache = new Map(); // ini 路徑 → 解析過的按鍵（依大小 + 修改時間失效）
 
 const isDev = process.argv.includes('--dev');
@@ -174,7 +177,7 @@ app.whenReady().then(() => {
   }));
 
   // 介面只能改這些設定；金鑰等由專用 IPC 處理
-  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir', 'odRoot', 'odAfter', 'odInstance', 'odLaunchVia', 'odScheduleEnabled', 'odScheduleTime']);
+  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir', 'odRoot', 'odAfter', 'odInstance', 'odLaunchVia', 'odScheduleEnabled', 'odScheduleTime', 'meRoot', 'meInstance', 'meQuit', 'meLaunchVia', 'meScheduleEnabled', 'meScheduleTime', 'meBypassModCheck']);
   ipcMain.handle('settings:save', (_e, patch) => {
     const clean = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => RENDERER_KEYS.has(k)));
     settings = { ...settings, ...clean };
@@ -254,8 +257,34 @@ app.whenReady().then(() => {
     effGameDir,
   });
 
+  // ---- 免確認啟動（工作排程以最高權限執行）：有對應的工作就不跳 UAC ----
+  let odApi = null;
+  let meApi = null;
+  const elevApi = elevatedMain.register(ipcMain, {
+    entries: () => {
+      const list = [];
+      const exe = launcher.launcherExe(settings.xxmiRoot);
+      if (fs.existsSync(exe)) {
+        for (const g of config.GAMES) list.push(elevated.entry({ name: `XXMI-${g.id}`, label: `透過 XXMI 啟動${g.short || g.name}`, exe, args: launcher.launchArgs(g.id), dir: path.dirname(exe) }));
+      }
+      for (const e of [odApi?.taskEntry(), meApi?.taskEntry()]) if (e) list.push(elevated.entry(e));
+      return list;
+    },
+  });
+  // 需要系統管理員權限的程式：工作排程 → 否則 fallback（預設 ShellExecute runas，跳 UAC）
+  const startElevated = (name, exe, args, dir, fallback) => elevApi.start(name, fallback || (() => elevated.runAsAdmin(exe, args, dir)));
+  // 透過 XXMI 啟動遊戲（gui = 只開 XXMI 視窗，不走工作排程）
+  const launchXxmi = async (gameId, opts = {}) => {
+    const id = gameById(gameId).id;
+    const gui = Boolean(opts.gui);
+    if (gui) return launcher.launch(settings.xxmiRoot, id, { gui });
+    let r = null;
+    await elevApi.start(`XXMI-${id}`, async () => { r = await launcher.launch(settings.xxmiRoot, id, { gui }); });
+    return r || { exe: launcher.launcherExe(settings.xxmiRoot), args: launcher.launchArgs(id) };
+  };
+
   // ---- 絕區零一條龍（OneDragon）：啟動、定時、下載官方安裝程式 ----
-  onedragonMain.register(ipcMain, {
+  odApi = onedragonMain.register(ipcMain, {
     getSettings: () => settings,
     saveSettings: (patch) => {
       settings = { ...settings, ...patch };
@@ -265,7 +294,24 @@ app.whenReady().then(() => {
     shell,
     BrowserWindow,
     downloadsDir: () => app.getPath('downloads'),
-    launchGame: () => launcher.launch(settings.xxmiRoot, 'ZZMI', { gui: false }),
+    launchGame: () => launchXxmi('ZZMI'),
+    startElevated,
+    emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
+  });
+
+  // ---- 終末地自動每日（MaaEnd）：啟動、定時、下載官方壓縮檔 ----
+  meApi = maaendMain.register(ipcMain, {
+    getSettings: () => settings,
+    saveSettings: (patch) => {
+      settings = { ...settings, ...patch };
+      config.saveSettings(app.getPath('userData'), settings);
+    },
+    dialog,
+    shell,
+    BrowserWindow,
+    downloadsDir: () => app.getPath('downloads'),
+    launchGame: () => launchXxmi('EFMI'),
+    startElevated,
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
 
@@ -427,7 +473,7 @@ app.whenReady().then(() => {
 
   // 透過 XXMI Launcher 啟動遊戲（opts.gui = 只開 XXMI 視窗）
   ipcMain.handle('xxmi:launch', async (_e, gameId, opts) => {
-    const r = await launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) });
+    const r = await launchXxmi(gameId, { gui: Boolean(opts?.gui) });
     return { args: r.args };
   });
   ipcMain.handle('xxmi:available', () => fs.existsSync(launcher.launcherExe(settings.xxmiRoot)));
@@ -556,7 +602,7 @@ ${modPath}`,
     getSettings: () => settings,
     getHotkey: () => overlay?.hotkey || '',
     games: config.GAMES.map((g) => ({ id: g.id, name: g.name, short: g.short })),
-    onLaunch: (gameId, opts) => launcher.launch(settings.xxmiRoot, gameById(gameId).id, { gui: Boolean(opts?.gui) }),
+    onLaunch: (gameId, opts) => launchXxmi(gameId, { gui: Boolean(opts?.gui) }),
     onOverlay: () => overlay?.show(),
     onQuit: () => { quitting = true; app.quit(); },
   });

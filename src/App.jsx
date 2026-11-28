@@ -8,6 +8,7 @@ import MapView from './MapView.jsx';
 import EffBar from './EffBar.jsx';
 import KeysDialog from './KeysDialog.jsx';
 import AutoDaily from './AutoDaily.jsx';
+import MaaEndDaily from './MaaEndDaily.jsx';
 import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 import Picker from './Picker.jsx';
@@ -163,7 +164,9 @@ export default function App() {
   useEffect(() => {
     const offS = api.onOdStarted(({ reason }) => showToast(reason === 'schedule' ? '已依排程啟動 OneDragon 一條龍' : '已啟動 OneDragon 一條龍'));
     const offE = api.onOdError(({ message, reason }) => showToast(`${reason === 'schedule' ? '一條龍定時執行' : '一條龍'}失敗：${message}`, 'error'));
-    return () => { offS(); offE(); };
+    const offMS = api.onMeStarted(({ reason, instance }) => showToast(`${reason === 'schedule' ? '已依排程啟動' : '已啟動'} MaaEnd（${instance}）`));
+    const offME = api.onMeError(({ message, reason }) => showToast(`${reason === 'schedule' ? 'MaaEnd 定時執行' : 'MaaEnd'}失敗：${message}`, 'error'));
+    return () => { offS(); offE(); offMS(); offME(); };
   }, [showToast]);
 
   // 終末地切換 XXMI / EFF
@@ -187,7 +190,7 @@ export default function App() {
     rescan();
     if (gameId) api.saveSettings({ lastGame: gameId });
     if (gameId && gameId !== 'EFMI') setView((v) => (v === 'blueprint' || v === 'map' ? 'local' : v));
-    if (gameId && gameId !== 'ZZMI') setView((v) => (v === 'daily' ? 'local' : v));
+    if (gameId && gameId !== 'ZZMI' && gameId !== 'EFMI') setView((v) => (v === 'daily' ? 'local' : v));
   }, [gameId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncChars = useCallback(async (silent = false) => {
@@ -461,7 +464,7 @@ export default function App() {
           <button className={view === 'gacha' ? 'active' : ''} onClick={() => setView('gacha')}>抽卡紀錄</button>
           {gameId === 'EFMI' && <button className={view === 'blueprint' ? 'active' : ''} onClick={() => setView('blueprint')}>藍圖</button>}
           {gameId === 'EFMI' && <button className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}>互動地圖</button>}
-          {gameId === 'ZZMI' && <button className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>自動每日</button>}
+          {(gameId === 'ZZMI' || gameId === 'EFMI') && <button className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>自動每日</button>}
           <div className="spacer" />
           <button className="btn small" onClick={async () => { const r = await api.pickArchives(gameId); if (r.length) showToast(`準備安裝 ${r.length} 個壓縮檔`); }}>📦 從壓縮檔安裝</button>
           {xxmiOk && (
@@ -477,6 +480,8 @@ export default function App() {
         )}
         {view === 'map' && gameId === 'EFMI' ? null : view === 'daily' && gameId === 'ZZMI' ? (
           <AutoDaily showToast={showToast} />
+        ) : view === 'daily' && gameId === 'EFMI' ? (
+          <MaaEndDaily key={gameId} showToast={showToast} />
         ) : view === 'blueprint' && gameId === 'EFMI' ? (
           <Blueprint showToast={showToast} />
         ) : view === 'gacha' ? (

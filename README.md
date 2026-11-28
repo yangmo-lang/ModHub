@@ -74,6 +74,48 @@ npm test         # 掃描/切換邏輯單元測試
   `plugins\` 在 OneDragon 的 .gitignore 裡，不會被它啟動時的程式更新（`force_update`）蓋掉，也不修改 OneDragon 本身的檔案。移除 = 移到資源回收筒
 - OneDragon 會模擬操作遊戲，可能違反遊戲條款，風險自負
 
+### 終末地自動每日（MaaEnd）
+
+- 由第三方工具 [MaaEnd](https://github.com/MaaEnd/MaaEnd)（AGPL-3.0，介面是 [MXU](https://github.com/MistEO/MXU)）執行；
+  ModHub **不含**它的程式碼，只用 MXU 公開的命令列參數啟動：`MaaEnd.exe --autostart -i <實例> [-q]`
+  （`-i` 指定要自動執行的實例 = MaaEnd 的分頁，`-q` 執行完自動關閉 MaaEnd）。`electron/maaend.cjs`、`electron/maaend-main.cjs`、`src/MaaEndDaily.jsx`
+- 選終末地時多一個「**自動每日**」分頁：MaaEnd 資料夾（沒設定時在各磁碟根目錄與使用者資料夾找名稱含 MaaEnd 的資料夾）、要執行的實例、
+  開遊戲方式、跑完關閉 MaaEnd、每天定時執行（與一條龍相同：ModHub 開著時到時間後 30 分鐘內啟動一次）；遊戲內疊加介面選終末地時有「▶ MaaEnd」
+- **任務清單與任務設定**（`electron/maaend-tasks.cjs`、`src/MaaEndTasks.jsx`）：讀寫 MaaEnd 的 `config\mxu-MaaEnd.json`（`instances[].tasks[]`），
+  可勾選、調整順序、新增 / 移除任務，任務旁的 ⚙ 展開該任務的所有選項（開關、下拉、多選、數值 / 文字輸入，含選到某個選項後才出現的子選項）
+  - 定義讀自安裝目錄的 `interface.json`（JSONC）與它 import 的 `tasks\*.json`（`task[]`、`option{}`），名稱與說明用 `locales\interface\zh_tw.json`；依實例的控制器 / 資源過濾
+  - 值的格式與 MaaEnd 相同（`{type:'select',caseName}`、`{type:'checkbox',caseNames}`、`{type:'switch',value}`、`{type:'input',values}`）；只寫改過的值，
+    沒改的沿用 MaaEnd 的預設值（`default_case`、`input.default`）；輸入值依定義的 `verify` 正規式檢查，錯誤訊息用 MaaEnd 的 `pattern_msg`；熱鍵與密碼欄位留在 MaaEnd 裡設定
+  - 勾選同時更新 `enabled` 與 `enabledByController[控制器]`；新任務的 id 為 7 碼隨機英數、選項用預設值
+  - 啟動遊戲的前置任務（`__MXU_PRETASK__*`）與切換帳號（`AccountSwitch`）不顯示也不能改（ModHub 自己透過 XXMI 開遊戲）
+  - 只改 `instances[].tasks`，其他欄位原樣保留；第一次寫入前備份成 `mxu-MaaEnd.json.modhub-bak`；MaaEnd 執行中不寫入
+    （它把設定放在記憶體裡、關閉時會蓋回去，所以要先關閉 MaaEnd）
+- **繁體中文遊戲畫面**：MaaEnd 原生支援（比對文字裡繁、簡、日、韓、英都有列，輔助程式也有 zh_tw 資料），不需要像絕區零那樣裝外掛。
+  曾試過把 OCR 字典繁轉簡，但兩岸用詞不同（「按下任意位置繼續」與「点击任意位置继续」）反而兩邊都比對不到，已停用；
+  看到舊版留下的 `keys.txt.modhub-bak` 會自動還原（`electron/maaend-zhtw.cjs`）
+- **繞過隱藏 UID 的 MOD 檢查**（`electron/maaend-bypass.cjs`）：MaaEnd 每個任務開始前用 OCR 看畫面左下角的 UID（`__SceneImageCheckMod`），
+  看不到（例如 Advanced HUD Control 的 `$hide_uid`）就跳提示並中止。勾選後把這個節點的 `next` 從 `[…Success, …FailedFinish]` 改成 `[…Success, EmptyNode]`
+  （MaaEnd 自己的空節點，與它的 Windows 浮水印檢查相同寫法），檢查不通過也繼續；只改 `resource*\pipeline\nodes.json` 這一行，
+  第一次備份 `nodes.json.modhub-bak`，取消勾選精確改回；格式和預期不同時不改。同樣每次執行前重新套用
+- **開遊戲**：預設由 ModHub 先透過 XXMI 開終末地（載入 MOD），偵測到 `Endfield.exe` 後等 20 秒再啟動 MaaEnd；也可交給 MaaEnd 的「啟動遊戲」
+- MaaEnd 的 Win32 控制器需要系統管理員權限，ModHub 以 `runas` 啟動（跳 UAC），或用下面的「免確認啟動」
+- MaaEnd 只允許開一個，已經開著時再啟動只會叫出舊視窗、不會自動執行，所以 ModHub 會先檢查並提示關閉
+- 沒裝時可「下載官方 Windows 版」：GitHub 最新版的 `MaaEnd-win-x86_64-v*.zip`（ARM 版選 aarch64）存到「下載」並比對 SHA-256，ModHub 不解壓縮也不執行
+- MaaEnd 會模擬操作遊戲，可能違反遊戲條款，風險自負
+
+### 免確認啟動（工作排程）
+
+- XXMI Launcher、OneDragon、MaaEnd 都需要系統管理員權限，平常每次啟動都會跳 UAC。「設定 → 免確認啟動」會在 Windows 工作排程器的
+  `\ModHub\` 資料夾建立「以最高權限執行」（`RunLevel=HighestAvailable`、`LogonType=InteractiveToken`）、沒有觸發條件的工作，
+  之後 ModHub 用 `schtasks /run` 啟動，不再跳 UAC（MaaEnd 自己的開機自動啟動也是同樣做法）。`electron/elevated.cjs`、`electron/elevated-main.cjs`、`src/Elevated.jsx`
+- 工作：`XXMI-<SRMI|WWMI|ZZMI|EFMI>`（`--nogui --xxmi`，即「▶ 啟動」、系統匣、一條龍 / MaaEnd 先開遊戲）、`OneDragon`（目前的一條龍參數）、`MaaEnd`（目前的實例）。
+  「XXMI」按鈕（只開視窗）不走工作排程
+- 建立 / 更新 / 移除時用 `Start-Process -Verb RunAs` 開一個系統管理員 PowerShell（跳一次 UAC）執行 `Register-ScheduledTask` / `Unregister-ScheduledTask`；
+  腳本以 `-EncodedCommand` 傳遞，不寫暫存檔。工作的優先順序設為一般（4），避免工作排程預設的「低於標準」連帶影響遊戲
+- 每次啟動前讀工作排程（`Get-ScheduledTask`，不需權限）比對執行檔與參數；設定改過（例如一條龍跑完動作、MaaEnd 實例）而不一致時顯示「需要更新」，
+  更新前改回原本會跳 UAC 的啟動方式
+- 代價：之後這些 exe 不經確認就以系統管理員權限執行；若其他程式換掉這些 exe（例如 `%APPDATA%\XXMI Launcher` 底下的），也會被以系統管理員權限執行
+
 ### 系統匣
 
 - 最小化或按 ✕ 時縮到系統匣（可在「設定」分別關掉），遊戲內面板的快捷鍵仍然有效
@@ -117,6 +159,8 @@ npm test         # 掃描/切換邏輯單元測試
 - `electron/watcher.cjs` 監看 Mods 資料夾（有測試）
 - `electron/overlay.cjs` 遊戲內疊加介面與全域快捷鍵（有測試）
 - `electron/tray.cjs` 系統匣（有測試）；圖示在 `electron/assets/`
+- `electron/elevated.cjs` 免確認啟動（工作排程，有測試）
+- `electron/onedragon*.cjs` 絕區零一條龍、`electron/maaend*.cjs` 終末地 MaaEnd（有測試）
 - `scripts/release.cjs` 發布流程（見下方）
 - `src/` React 介面（`App.jsx` 主畫面；`ModCard`、`Picker`、`Settings` 各自一個檔案，共用工具在 `common.jsx`）
 
@@ -277,6 +321,7 @@ npm run release -- --notes changes.md --publish  # 另外建立 GitHub Release�
 
 ModHub 以 [MIT 授權](LICENSE) 釋出。
 
+- OneDragon（GPL-3.0）、MaaEnd / MXU（AGPL-3.0）、EFF（AGPL-3.0）都是使用者自己安裝的獨立程式，ModHub 只啟動它們、讀取它們的設定檔，不包含也不散布它們的程式碼
 - 打包的第三方套件各自依其授權：React、node-unrar-js、7zip-bin（MIT）、opencc-js（MIT 與 Apache-2.0）；
   7zip-bin 內含的 `7za.exe` 屬於 7-Zip（GNU LGPL 與 unRAR 授權限制）
 - 遊戲名稱、角色名稱與圖片屬於各自的權利人（HoYoverse、庫洛、鷹角網路等）；ModHub 是非官方工具，與上述公司無關

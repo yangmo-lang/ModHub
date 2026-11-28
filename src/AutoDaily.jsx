@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, errText } from './common.jsx';
 import OneDragonTasks from './OneDragonTasks.jsx';
+import ElevatedSettings from './Elevated.jsx';
 
 /** 絕區零一條龍（第三方工具 OneDragon）：資料夾、跑完動作、帳號實例、定時；改了就直接存 */
 const OD_AFTER = [['close', '關閉遊戲'], ['none', '不動作'], ['shutdown', '關閉遊戲並關機（60 秒後）'], ['sleep', '關閉遊戲並睡眠'], ['hibernate', '關閉遊戲並休眠']];
@@ -86,6 +87,7 @@ export function OneDragonSettings() {
           )}
         </div>
       )}
+      {st.found && <ElevatedSettings compact key={`${st.odAfter}|${st.odInstance}|${st.found}`} />}
       {msg && <div className="card-meta">{msg}</div>}
     </div>
   );

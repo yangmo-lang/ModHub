@@ -719,3 +719,24 @@ kbd { font-family: inherit; font-size: 11px; padding: 0 5px; border: 1px solid v
 .od-times { width: 64px; }
 .od-drop { display: block; color: var(--accent-2); font-size: 12px; }
 .od-zhtw { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+
+/* 免確認啟動（工作排程） */
+.elev-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.elev-list li { display: flex; justify-content: space-between; gap: 12px; padding: 3px 6px; border-radius: 6px; }
+.elev-list li:hover { background: var(--panel-2); }
+.elev-ok { color: var(--ok, #3fb950); }
+.elev-outdated { color: var(--warn, #d29922); }
+
+
+/* MaaEnd 任務選項 */
+.me-detail { display: flex; flex-direction: column; gap: 4px; }
+.me-opt { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.me-opt.nested { margin-left: 18px; padding-left: 10px; border-left: 1px dashed var(--line, #333); }
+.me-opt label.check { margin: 0; font-size: 13px; }
+.me-opt label.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; margin: 0; flex-wrap: wrap; }
+.me-opt-multi { display: flex; flex-direction: column; gap: 2px; }
+.me-opt-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0 10px; }
+.me-opt-all .link { padding: 0 6px 0 0; font-size: 12px; }
+.me-opt-inputs { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.me-num { width: 90px; }
+.me-text { width: 260px; }

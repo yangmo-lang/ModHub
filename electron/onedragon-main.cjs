@@ -22,6 +22,7 @@ function shellStart(exe, args, spawnImpl = spawn) {
 }
 
 const GAME_SETTLE_MS = 20000;
+const TASK_NAME = 'OneDragon';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 每 intervalMs 檢查一次，timeoutMs 內成立就回傳 true */
@@ -89,7 +90,10 @@ function register(ipcMain, ctx) {
         await sleep(GAME_SETTLE_MS); // 讓遊戲視窗出現並開始載入
       }
       ctx.emit('od:stage', { stage: 'onedragon' });
-      await shellStart(od.launcherPath(dir), args);
+      // 有設定免確認啟動（工作排程）就不跳 UAC；沒有就和雙擊一樣透過 Shell 啟動
+      const exe = od.launcherPath(dir);
+      if (ctx.startElevated) await ctx.startElevated(TASK_NAME, exe, args, dir, () => shellStart(exe, args));
+      else await shellStart(exe, args);
     } finally {
       busy = false;
       ctx.emit('od:stage', null);
@@ -198,7 +202,14 @@ function register(ipcMain, ctx) {
   }, 30000);
   timer.unref?.();
 
-  return { status, run };
+  /** 工作排程用的命令列（找不到 OneDragon 時不建立） */
+  function taskEntry() {
+    const dir = root();
+    if (!dir) return null;
+    return { name: TASK_NAME, label: 'OneDragon 一條龍', exe: od.launcherPath(dir), args: od.launchArgs(od.options(ctx.getSettings())), dir };
+  }
+
+  return { status, run, taskEntry };
 }
 
-module.exports = { register, shellStart, waitFor };
+module.exports = { register, TASK_NAME, shellStart, waitFor, processRunning, sha256File, sleep };

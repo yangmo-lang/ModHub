@@ -120,6 +120,13 @@ export default function Overlay() {
     setTimeout(() => api.overlayHide(), 1500);
   };
 
+  // 終末地：啟動第三方工具 MaaEnd（主畫面「終末地 → 自動每日」設定實例）
+  const runMaaEnd = () => {
+    setMsg({ text: 'MaaEnd 準備中（遊戲沒開會先透過 XXMI 開遊戲），面板即將收起', kind: 'info' });
+    api.meRun().catch((e) => setMsg({ text: errText(e), kind: 'error' }));
+    setTimeout(() => api.overlayHide(), 1500);
+  };
+
   const pickMode = (m) => { setMode(m); api.overlaySetWide(m === 'map').catch(() => {}); };
   const showMap = HAS_MAP.has(gameId) && mode === 'map';
 
@@ -146,6 +153,9 @@ export default function Overlay() {
         {!showMap && <span className="ov-count">{enabled}/{total} 啟用</span>}
         {gameId === 'ZZMI' && (
           <button className="ov-od" disabled={busy} onClick={runOneDragon} title="用 OneDragon 執行絕區零一條龍（自動每日）；任務與設定在主畫面「絕區零 → 自動每日」">▶ 一條龍</button>
+        )}
+        {gameId === 'EFMI' && (
+          <button className="ov-od" disabled={busy} onClick={runMaaEnd} title="用 MaaEnd 執行終末地自動每日；實例與設定在主畫面「終末地 → 自動每日」">▶ MaaEnd</button>
         )}
         <div className="spacer" />
         <button className="link" onClick={() => api.overlayOpenMain()} title="開啟 ModHub 主視窗">主視窗</button>

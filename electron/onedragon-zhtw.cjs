@@ -8,21 +8,27 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const PLUGIN_ID = 'modhub_zh_tw';
-const VERSION = 1; // 外掛內容改了就加一，ModHub 會提示更新
+const VERSION = 2; // 外掛內容改了就加一（2：對照表不再轉換本身是簡體結果的字），ModHub 會提示更新
 const SOURCE_DIR = path.join(__dirname, 'onedragon-plugin');
 const FILES = ['__init__.py', `${PLUGIN_ID}_const.py`, `${PLUGIN_ID}_factory.py`];
 
 const pluginDir = (root) => path.join(root, 'plugins', PLUGIN_ID);
 const markerFile = (root) => path.join(pluginDir(root), 'modhub.json');
 
-/** 繁 → 簡單字對照表（只收一對一、和原字不同的字） */
+/**
+ * 繁 → 簡單字對照表（只收一對一、和原字不同的字）
+ * 本身就是某個繁體字的簡體結果的字不轉（例如 OpenCC 有「麼→么」也有「么→幺」，「什么」的「么」不能再變成「幺」）
+ */
 function buildMap(convert) {
-  const map = {};
+  const raw = {};
   for (let c = 0x3400; c <= 0x9fff; c++) {
     const ch = String.fromCharCode(c);
     const s = convert(ch);
-    if (s !== ch && s.length === 1) map[ch] = s;
+    if (s !== ch && s.length === 1) raw[ch] = s;
   }
+  const targets = new Set(Object.values(raw));
+  const map = {};
+  for (const [t, s] of Object.entries(raw)) if (!targets.has(t)) map[t] = s;
   return map;
 }
 
