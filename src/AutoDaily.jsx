@@ -80,6 +80,25 @@ export function OneDragonSettings() {
           </div>
         );
       })()}
+      {st.found && st.gamePath && (() => {
+        const { guess, labels, instances } = st.gamePath;
+        const L = (r) => labels[r] || r;
+        const unset = instances.filter((i) => i.region == null);
+        const isCn = (r) => r === 'cn' || r === 'cn_b';
+        // 已設定、但國服 / 國際服和遊戲本身不符（OneDragon 會找錯視窗標題）
+        const wrong = guess.region ? instances.filter((i) => i.region != null && isCn(i.region || 'cn') !== isCn(guess.region)) : [];
+        return (
+          <div className="row od-zhtw">
+            <b>遊戲區服</b>
+            {unset.length > 0
+              ? (guess.region
+                ? <span className="card-meta">OneDragon 還沒設定區服（實例 {unset.map((i) => i.idx).join('、')}，它會當成國服而找不到國際服的遊戲視窗）；執行一條龍前 ModHub 會自動設為 {L(guess.region)}（依 {guess.source === 'config.ini' ? '遊戲的 config.ini' : guess.source === '預設' ? '遊戲是國際服，抽卡紀錄沒有 UID，預設港澳台服' : `遊戲是國際服，抽卡紀錄 ${guess.source}`}）</span>
+                : <span className="error-text">OneDragon 還沒設定區服（會當成國服），ModHub 也判斷不出遊戲是國服還是國際服；國際服請在 OneDragon 的「帳戶管理」設定區服，否則它找不到遊戲視窗</span>)
+              : <span className="card-meta">✓ {[...new Set(instances.map((i) => L(i.region)))].join('、')}</span>}
+            {wrong.length > 0 && <span className="error-text">實例 {wrong.map((i) => i.idx).join('、')} 的區服是 {L(wrong[0].region)}，但遊戲是{isCn(guess.region) ? '國服' : '國際服'}：OneDragon 會找不到遊戲視窗，請在 OneDragon 的「帳戶管理」改成正確的區服</span>}
+          </div>
+        );
+      })()}
       {st.found && (
         <div className="row od-zhtw">
           <b>繁體中文遊戲畫面</b>

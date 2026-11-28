@@ -56,6 +56,10 @@ npm test         # 掃描/切換邏輯單元測試
 - **遊戲路徑**（`electron/onedragon-game.cjs`）：OneDragon 不會自己找遊戲，`config\<實例>\game_account.yml` 的 `game_path` 沒設定時「打開遊戲」會失敗。
   ModHub 從 XXMI 設定的絕區零資料夾（或遊戲的 `Player.log`）找到 `ZenlessZoneZero.exe`，每次執行一條龍前替 `game_path` 是空的實例補上這一行
   （這個檔案也存帳號密碼：只改這一行、其他內容原樣保留、不讀出也不顯示；已設定的路徑不覆蓋；OneDragon 開著時不寫）。「自動每日」顯示各實例的路徑狀態
+- **遊戲區服**：OneDragon 依 `game_region` 決定要找的視窗標題（國服 / B 服找「绝区零」、其他找「ZenlessZoneZero」），沒設定時當成國服，
+  國際服的遊戲開著也找不到、會一直重開遊戲。ModHub 依遊戲資料夾的 `config.ini`（`uapc` 的 `nap_global` / `nap_cn`、`cps` 含 bilibili）分國服 / B 服 / 國際服，
+  國際服再用 ModHub 抽卡紀錄的絕區零 UID 開頭分區（10 美服、13 亞服、15 歐服、17 港澳台服；沒有紀錄預設港澳台服，細分只影響 OneDragon 用帳密登入時選伺服器），
+  只在 `game_region` 這一行不存在（從沒設定過）時補上；已設定但國服 / 國際服和遊戲不符時只在畫面上提醒
 - **任務設定**（任務旁的 ⚙，`electron/onedragon-apps.cjs`，寫 `config\<idx>\one_dragon\<app_id>.yml`）：
   每日簽到選簽到地點（吼吼餅鋪 / 卦象集錄 / 刮刮卡，讀自 `daily_signin_setting_flyout.py`）；錄像店營業、咖啡店選傳送地點（選項讀自安裝目錄 `*_config.py` 的 `TransportPoint`）；
   體力刷本新增 / 刪除 / 排序副本計畫與次數（選項讀自 `assets\game_data\compendium_data.yml` 的「训练」分頁：实战模拟室、区域巡防、专业挑战室、恶名狩猎），

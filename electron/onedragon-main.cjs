@@ -74,7 +74,8 @@ function register(ipcMain, ctx) {
   function gamePathStatus(dir) {
     if (!dir) return null;
     const exe = odGame.findGameExe(ctx.xxmiRoot?.() || '');
-    return { exe, instances: odGame.status(dir, instanceIndices(dir)) };
+    const guess = odGame.guessRegion(exe, ctx.zzzUids?.() || []);
+    return { exe, guess, labels: odGame.REGION_LABEL, instances: odGame.status(dir, instanceIndices(dir)) };
   }
 
   function status() {
@@ -90,11 +91,12 @@ function register(ipcMain, ctx) {
     if (busy) throw new Error('一條龍正在準備中');
     const o = od.options(ctx.getSettings());
     const args = od.launchArgs(o);
-    // 沒打開過 OneDragon 設定的人沒有遊戲路徑，它的「打開遊戲」會失敗：空的才補上（OneDragon 開著時不寫，它會蓋掉）
+    // 沒打開過 OneDragon 設定的人沒有遊戲路徑與區服（預設國服 → 找「绝区零」視窗，國際服的遊戲找不到）：沒設定過的才補上（OneDragon 開著時不寫，它會蓋掉）
     if (!(await oneDragonRunning())) {
       try {
-        const filled = odGame.fill(dir, instanceIndices(dir), odGame.findGameExe(ctx.xxmiRoot?.() || ''));
-        if (filled.length) ctx.emit('od:gamePathFilled', { instances: filled });
+        const exe = odGame.findGameExe(ctx.xxmiRoot?.() || '');
+        const filled = odGame.fill(dir, instanceIndices(dir), exe, odGame.guessRegion(exe, ctx.zzzUids?.() || []).region);
+        if (filled.length) ctx.emit('od:gamePathFilled', { instances: filled.map((f) => f.idx), path: filled.some((f) => f.path), region: filled.find((f) => f.region)?.region || '' });
       } catch { /* 寫不進去就交給 OneDragon 自己提示 */ }
     }
     busy = true;

@@ -164,7 +164,7 @@ export default function App() {
   useEffect(() => {
     const offS = api.onOdStarted(({ reason }) => showToast(reason === 'schedule' ? '已依排程啟動 OneDragon 一條龍' : '已啟動 OneDragon 一條龍'));
     const offE = api.onOdError(({ message, reason }) => showToast(`${reason === 'schedule' ? '一條龍定時執行' : '一條龍'}失敗：${message}`, 'error'));
-    const offGP = api.onOdGamePathFilled(({ instances }) => showToast(`已幫 OneDragon 填入遊戲路徑（實例 ${instances.join('、')}）`));
+    const offGP = api.onOdGamePathFilled(({ instances, path, region }) => showToast(`已幫 OneDragon 填入${[path && '遊戲路徑', region && '遊戲區服'].filter(Boolean).join('與') || '設定'}（實例 ${instances.join('、')}）`));
     const offMS = api.onMeStarted(({ reason, instance }) => showToast(`${reason === 'schedule' ? '已依排程啟動' : '已啟動'} MaaEnd（${instance}）`));
     const offME = api.onMeError(({ message, reason }) => showToast(`${reason === 'schedule' ? 'MaaEnd 定時執行' : 'MaaEnd'}失敗：${message}`, 'error'));
     return () => { offS(); offE(); offGP(); offMS(); offME(); };

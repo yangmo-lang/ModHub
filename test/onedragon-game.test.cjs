@@ -41,9 +41,42 @@ test('填入：只填空的實例；沒有檔案就建立只有這一行的檔�
   fs.mkdirSync(path.join(root, 'config', '01'), { recursive: true });
   fs.writeFileSync(g.accountFile(root, 1), 'game_path: D:\\mine.exe\r\naccount: secret\r\n');
   const exe = 'C:\\Z\\ZenlessZoneZero.exe';
-  assert.deepEqual(g.fill(root, [1, 2], exe), [2]);
+  assert.deepEqual(g.fill(root, [1, 2], exe), [{ idx: 2, path: exe }]);
   assert.equal(fs.readFileSync(g.accountFile(root, 1), 'utf8'), 'game_path: D:\\mine.exe\r\naccount: secret\r\n', '已設定的不動');
   assert.equal(fs.readFileSync(g.accountFile(root, 2), 'utf8'), `game_path: ${exe}\n`);
-  assert.deepEqual(g.status(root, [1, 2, 3]), [{ idx: 1, path: 'D:\\mine.exe' }, { idx: 2, path: exe }, { idx: 3, path: '' }]);
+  assert.deepEqual(g.status(root, [1, 2, 3]), [{ idx: 1, path: 'D:\\mine.exe', region: null }, { idx: 2, path: exe, region: null }, { idx: 3, path: '', region: null }]);
   assert.deepEqual(g.fill(root, [3], ''), [], '找不到 exe 就不寫');
+});
+
+test('區服：config.ini 分國服 / B 服 / 國際服，國際服再用 UID 分區', () => {
+  const ini = (body) => ({ read: () => `[General]\r\n${body}\r\n` });
+  const exe = 'C:\\Z\\ZenlessZoneZero.exe';
+  assert.equal(g.detectClient(exe, ini('cps=pcseaepic\r\nuapc={"hyp":{"uapc":""},"nap_global":{"uapc":""}}')), 'intl');
+  assert.equal(g.detectClient(exe, ini('cps=mihoyo\r\nuapc={"nap_cn":{"uapc":""}}')), 'cn');
+  assert.equal(g.detectClient(exe, ini('cps=bilibili\r\nuapc={"nap_cn":{"uapc":""}}')), 'cnb');
+  assert.equal(g.detectClient(exe, { read: () => { throw new Error('ENOENT'); } }), '');
+  assert.equal(g.regionFromUid('1300004194'), 'asia');
+  assert.equal(g.regionFromUid('1712345678'), 'twhkmo');
+  assert.equal(g.regionFromUid('1012345678'), 'us');
+  assert.equal(g.regionFromUid('1512345678'), 'eu');
+  assert.equal(g.regionFromUid('12345678'), '');
+  const intl = ini('uapc={"nap_global":{}}');
+  assert.deepEqual(g.guessRegion(exe, ['1300004194'], intl), { region: 'asia', client: 'intl', source: 'UID 1300004194' });
+  assert.deepEqual(g.guessRegion(exe, [], intl), { region: 'twhkmo', client: 'intl', source: '預設' });
+  assert.equal(g.guessRegion(exe, ['1300004194'], ini('uapc={"nap_cn":{}}')).region, 'cn', '國服不看 UID');
+  assert.equal(g.guessRegion('', []).region, '');
+});
+
+test('填入區服：只在從沒設定過（沒有 game_region 這一行）時補上；設定過的（含國服）不動', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'modhub-odregion-'));
+  fs.mkdirSync(path.join(root, 'config', '01'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'config', '02'), { recursive: true });
+  fs.writeFileSync(g.accountFile(root, 1), 'game_path: D:\\mine.exe\r\npassword: secret\r\n');
+  fs.writeFileSync(g.accountFile(root, 2), 'game_region: cn\n');
+  const exe = 'C:\\Z\\ZenlessZoneZero.exe';
+  assert.deepEqual(g.fill(root, [1, 2, 3], exe, 'asia'), [{ idx: 1, region: 'asia' }, { idx: 2, path: exe }, { idx: 3, path: exe, region: 'asia' }]);
+  assert.equal(fs.readFileSync(g.accountFile(root, 1), 'utf8'), 'game_path: D:\\mine.exe\r\npassword: secret\r\ngame_region: asia\r\n');
+  assert.equal(g.readField(fs.readFileSync(g.accountFile(root, 2), 'utf8'), 'game_region'), 'cn', '使用者設定的國服不改');
+  assert.deepEqual(g.status(root, [1, 2]).map((i) => i.region), ['asia', 'cn']);
+  assert.deepEqual(g.fill(root, [1], '', 'mars'), [], '不認得的區服不寫');
 });

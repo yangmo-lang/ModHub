@@ -296,6 +296,14 @@ app.whenReady().then(() => {
     downloadsDir: () => app.getPath('downloads'),
     launchGame: () => launchXxmi('ZZMI'),
     xxmiRoot: () => settings.xxmiRoot,
+    // ModHub 抽卡紀錄裡的絕區零 UID（最近更新的在前），用來分辨國際服的區服
+    zzzUids: () => {
+      const dir = path.join(app.getPath('userData'), 'gacha', 'ZZMI');
+      try {
+        return fs.readdirSync(dir).filter((f) => /^\d+\.json$/.test(f))
+          .map((f) => ({ uid: f.slice(0, -5), t: fs.statSync(path.join(dir, f)).mtimeMs })).sort((a, b) => b.t - a.t).map((x) => x.uid);
+      } catch { return []; }
+    },
     startElevated,
     emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
