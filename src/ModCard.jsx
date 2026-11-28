@@ -25,7 +25,11 @@ export default function ModCard({ m, busy, uncategorized, suggestedName, onToggl
             <span />
           </label>
           {onPick && <button className="link" onClick={onPick} disabled={busy} title="移到其他角色或分類資料夾">{uncategorized ? '移入…' : '移動…'}</button>}
-          {m.keyCount > 0 && onKeys && <button className="link keys-btn" onClick={onKeys} title="查看這個 MOD 的按鍵設定">⌨ {m.keyCount}</button>}
+          {(m.keyCount > 0 || m.controlCount > 0) && onKeys && (
+            <button className="link keys-btn" onClick={onKeys} title={m.controlCount ? '查看這個 MOD 的按鍵與滑桿' : '查看這個 MOD 的按鍵設定'}>
+              {m.keyCount > 0 && `⌨ ${m.keyCount}`}{m.keyCount > 0 && m.controlCount > 0 ? ' ' : ''}{m.controlCount > 0 && `🎚 ${m.controlCount}`}
+            </button>
+          )}
           <button className="link" onClick={onOpen} title="在檔案總管開啟">開啟</button>
           <button className="link danger" onClick={onTrash} disabled={busy} title="移到資源回收筒（可從資源回收筒還原）">刪除</button>
         </div>

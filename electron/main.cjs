@@ -302,7 +302,12 @@ app.whenReady().then(() => {
     modsWatcher.set(eff.EFF_ID, eff.effPaths(dir).plugin); // 一次監看 mods 與 mods_disabled
     const result = eff.scanEff(dir, { characters: c?.data.characters, guessCharacter: c ? guessCharacter : null });
     for (const cat of result.categories) cat.displayName = cat.character ? cat.character.nameTw : chars.toTw(cat.name);
-    for (const m of result.mods) m.categoryTw = m.character ? m.character.nameTw : chars.toTw(m.category);
+    for (const m of result.mods) {
+      m.categoryTw = m.character ? m.character.nameTw : chars.toTw(m.category);
+      // EFF 也支援舊式 [Key…]；另外有 Ins 面板的滑桿 [ControlN]
+      m.keyCount = keybinds.modKeyBinds(m.path, keyCache).length;
+      m.controlCount = eff.modControls(m.path).length;
+    }
     return { ...base, ...result };
   }
 
@@ -390,7 +395,10 @@ app.whenReady().then(() => {
 
   // MOD 的按鍵設定明細（ini 的 [Key…] 區段）
   ipcMain.handle('mods:keys', (_e, gameId, modPath) => {
-    if (gameId === eff.EFF_ID) return [];
+    if (gameId === eff.EFF_ID) {
+      eff.locate(effGameDir(), modPath);
+      return [...keybinds.modKeyBinds(modPath, keyCache), ...eff.modControls(modPath).map((c) => ({ file: 'mod.ini', ...c }))];
+    }
     scanner.assertInside(config.modsDirFor(settings, gameById(gameId).id), modPath);
     return keybinds.modKeyBinds(modPath, keyCache);
   });

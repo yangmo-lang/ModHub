@@ -669,3 +669,19 @@ kbd { font-family: inherit; font-size: 11px; padding: 0 5px; border: 1px solid v
 .keys-vals { font-size: 12px; }
 .keys-vals code { color: var(--accent-2); }
 .keys-item .keys-cell { white-space: normal; }
+
+/* EFF 滑桿 */
+.ctl-section { margin-bottom: 10px; }
+.ctl-title { margin: 4px 0 8px; font-size: 12px; color: var(--muted); font-weight: normal; }
+.ctl-row { padding: 6px 2px 8px; border-bottom: 1px solid var(--line); }
+.ctl-head { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.ctl-head code { font-size: 11px; color: var(--muted); }
+.ctl-val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent-2); }
+.ctl-bar { height: 6px; border-radius: 999px; background: var(--panel-2); margin-top: 6px; overflow: hidden; }
+.ctl-bar span { display: block; height: 100%; background: var(--accent); }
+.ctl-range { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* 離愁軒匯入 */
+.lcx-bar { display: flex; align-items: center; gap: 10px; margin: 0 16px 10px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--panel); font-size: 13px; }
+.lcx-bar .spacer { flex: 1; }
+.lcx-bar .btn.small { margin-bottom: 0; flex: none; }

@@ -258,6 +258,67 @@ function uniqueModTarget(gameDir, name) {
   return path.join(p.mods, n);
 }
 
+// ---------- 控制項（Ins 面板的滑桿） ----------
+
+/** ini 文字 → [{ name, entries: Map(小寫鍵 → 值) }]（同名鍵取最後一個） */
+function iniSections(text) {
+  const out = [];
+  let cur = null;
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith(';')) continue;
+    const sec = /^\[([^\]]+)\]/.exec(line);
+    if (sec) { cur = { name: sec[1].trim(), entries: new Map() }; out.push(cur); continue; }
+    const kv = /^([^=]+?)\s*=\s*(.*)$/.exec(line);
+    if (cur && kv) cur.entries.set(kv[1].trim().toLowerCase(), kv[2].trim());
+  }
+  return out;
+}
+
+/**
+ * EFF 的 [ControlN]（variable / label / min / max）＋ state.ini 裡玩家調整後的值
+ * @returns [{ kind: 'control', section, label, variable, min, max, value, default }]
+ */
+function parseControls(modIni, stateIni = '') {
+  const sections = iniSections(modIni);
+  const state = new Map();
+  for (const s of iniSections(stateIni)) {
+    if (s.name.toLowerCase() !== 'values') continue;
+    for (const [k, v] of s.entries) state.set(k, v);
+  }
+  // [Constants] 裡的 persist $x = 預設值
+  const defaults = new Map();
+  for (const s of sections) {
+    if (s.name.toLowerCase() !== 'constants') continue;
+    for (const [k, v] of s.entries) {
+      const m = /(\$[\w.]+)\s*$/.exec(k);
+      if (m) defaults.set(m[1].toLowerCase(), v);
+    }
+  }
+  const num = (v) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+  return sections
+    .filter((s) => /^control/i.test(s.name) && s.entries.has('variable'))
+    .map((s) => {
+      const variable = s.entries.get('variable');
+      const key = variable.toLowerCase();
+      return {
+        kind: 'control',
+        section: s.name,
+        label: s.entries.get('label') || variable.replace(/^\$/, ''),
+        variable,
+        min: num(s.entries.get('min')) ?? 0,
+        max: num(s.entries.get('max')) ?? 1,
+        value: num(state.get(key)),
+        default: num(defaults.get(key)),
+      };
+    });
+}
+
+/** EFF MOD 的控制項（讀 mod.ini 與 state.ini） */
+function modControls(modDir) {
+  return parseControls(readText(path.join(modDir, 'mod.ini')), readText(path.join(modDir, 'state.ini')));
+}
+
 // ---------- 判斷壓縮檔內容 ----------
 
 /**
@@ -364,6 +425,6 @@ function pickRelease(release) {
 
 module.exports = {
   EFF_ID, GAME_EXE, REPO, PAGES, effPaths, gameDirFromXxmi, resolveGameDir, readDllVersion, status,
-  isEffIni, iniValue, actorKeys, characterForKey, findModDirs, scanEff, locate, setEnabled, uniqueModTarget,
+  isEffIni, iniValue, parseControls, modControls, actorKeys, characterForKey, findModDirs, scanEff, locate, setEnabled, uniqueModTarget,
   classifyFiles, checkFrameworkTree, installFramework, pickRelease,
 };

@@ -11,16 +11,19 @@ export default function KeysDialog({ gameId, mod, onClose, compact = false }) {
     api.modKeys(gameId, mod.path).then(setList).catch((e) => { setErr(errText(e)); setList([]); });
   }, [gameId, mod.path]);
 
+  // EFF 的滑桿（[ControlN]）另外列
+  const controls = useMemo(() => (list || []).filter((b) => b.kind === 'control'), [list]);
   // 依 ini 檔分組；只有一個檔時不顯示檔名
   const groups = useMemo(() => {
     const m = new Map();
-    for (const b of list || []) {
+    for (const b of (list || []).filter((x) => x.kind !== 'control')) {
       if (!m.has(b.file)) m.set(b.file, []);
       m.get(b.file).push(b);
     }
     return [...m.entries()];
   }, [list]);
-  const hasPad = (list || []).some((b) => b.keys.some((k) => k.gamepad));
+  const hasPad = (list || []).some((b) => b.keys?.some((k) => k.gamepad));
+  const fmt = (v) => (v === null || v === undefined ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(2));
 
   const keyChips = (keys) => keys
     .filter((k) => showPad || !k.gamepad || keys.every((x) => x.gamepad))
@@ -29,7 +32,7 @@ export default function KeysDialog({ gameId, mod, onClose, compact = false }) {
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className={`modal keys-modal ${compact ? 'compact' : ''}`} onClick={(e) => e.stopPropagation()}>
-        <h3>按鍵設定：{mod.name}</h3>
+        <h3>{controls.length && !groups.length ? '滑桿設定' : '按鍵設定'}：{mod.name}</h3>
         <p className="card-meta">
           從 MOD 的 ini 讀出（[Key…] 區段）。在遊戲裡按下對應按鍵切換；{mod.enabled ? '' : '這個 MOD 目前停用中，啟用並按 F10 後才有作用；'}
           有「條件」的按鍵只在條件成立時有效（例如角色在畫面上）。
@@ -37,8 +40,28 @@ export default function KeysDialog({ gameId, mod, onClose, compact = false }) {
         {hasPad && <label className="check"><input type="checkbox" checked={showPad} onChange={(e) => setShowPad(e.target.checked)} />顯示手把按鍵</label>}
         {err && <div className="error-text">{err}</div>}
         {!list && <div className="empty">讀取中…</div>}
-        {list && !list.length && !err && <div className="empty">這個 MOD 沒有設定按鍵</div>}
+        {list && !list.length && !err && <div className="empty">這個 MOD 沒有設定按鍵或滑桿</div>}
         <div className="keys-list">
+          {controls.length > 0 && (
+            <section className="ctl-section">
+              <h4 className="ctl-title">滑桿（EFF：遊戲內按 Insert 開面板調整，數值存在 state.ini）</h4>
+              {controls.map((c) => {
+                const v = c.value ?? c.default;
+                const pct = v === null || c.max === c.min ? 0 : Math.max(0, Math.min(100, ((v - c.min) / (c.max - c.min)) * 100));
+                return (
+                  <div key={c.section} className="ctl-row" title={`${c.section} · ${c.variable}`}>
+                    <div className="ctl-head">
+                      <b>{c.label}</b>
+                      <code>{c.variable.replace(/^\$/, '')}</code>
+                      <span className="ctl-val">{fmt(v)}{c.value === null && c.default !== null ? '（預設）' : ''}</span>
+                    </div>
+                    <div className="ctl-bar"><span style={{ width: `${pct}%` }} /></div>
+                    <div className="ctl-range"><span>{fmt(c.min)}</span><span>{fmt(c.max)}</span></div>
+                  </div>
+                );
+              })}
+            </section>
+          )}
           {groups.map(([file, binds]) => (
             <section key={file}>
               {groups.length > 1 && <h4 title={file}>{file}</h4>}

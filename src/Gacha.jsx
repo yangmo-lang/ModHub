@@ -49,6 +49,8 @@ export default function Gacha({ gameId, gameName, showToast }) {
   const [detail, setDetail] = useState(null); // { group, banner }
   const [logins, setLogins] = useState(null);
   const [loginBusy, setLoginBusy] = useState('');
+  const [lcx, setLcx] = useState(null); // 離愁軒視窗：null | 'open' | 'reading'
+  useEffect(() => { setLcx(null); }, [gameId]);
   const T = GAME_TEXT[gameId];
   const loggedIn = (logins || []).some((l) => l.loggedIn);
 
@@ -139,7 +141,28 @@ export default function Gacha({ gameId, gameName, showToast }) {
         {vis && <button className="btn" onClick={async () => { try { const p = await api.gachaExport(gameId, accountId); if (p) showToast(`已匯出到 ${p}`); } catch (e) { showToast(errText(e), 'error'); } }}>匯出</button>}
         {vis && UIGF_GAMES.has(gameId) && <button className="btn" title="UIGF v4.0 標準格式，可匯入其他支援 UIGF 的抽卡分析工具" onClick={async () => { try { const p = await api.gachaExport(gameId, accountId, 'uigf'); if (p) showToast(`已匯出 UIGF 到 ${p}`); } catch (e) { showToast(errText(e), 'error'); } }}>匯出 UIGF</button>}
         {HOYO(gameId) && <button className="btn" onClick={() => api.gachaOfficial(gameId)} title={`HoYoLAB 官方${T.page}`}>官方頁面</button>}
+        {gameId === 'EFMI' && (
+          <button className="btn" disabled={busy || lcx === 'reading'} title="補上 ModHub 開始記錄之前的卡池（離愁軒只有出貨摘要）"
+            onClick={async () => { try { await api.gachaLcxOpen(); setLcx('open'); } catch (e) { showToast(errText(e), 'error'); } }}>從離愁軒補紀錄</button>
+        )}
       </header>
+
+      {gameId === 'EFMI' && lcx && (
+        <div className="lcx-bar">
+          <span>已開啟離愁軒視窗：在視窗裡登入離愁軒（需要先在離愁軒匯入過抽卡紀錄），看到各卡池後按「讀取並匯入」。ModHub 只讀取頁面上顯示的卡池摘要，不會保存你的離愁軒帳號。</span>
+          <div className="spacer" />
+          <button className="btn small primary" disabled={lcx === 'reading'} onClick={async () => {
+            setLcx('reading');
+            try {
+              const v = await api.gachaLcxRead();
+              showToast(`已從離愁軒補上 ${v.cards} 個卡池的摘要${v.uid && !v.uidMatched ? `（離愁軒 UID ${v.uid} 沒有對應的帳號，已補到目前帳號）` : ''}`);
+              setLcx(null);
+              loadAccounts(v.account.id);
+            } catch (e) { showToast(errText(e), 'error'); setLcx('open'); }
+          }}>{lcx === 'reading' ? '讀取中…' : '讀取並匯入'}</button>
+          <button className="btn small" disabled={lcx === 'reading'} onClick={() => { api.gachaLcxClose(); setLcx(null); }}>取消</button>
+        </div>
+      )}
 
       <div className="account-bar">
         <b>官方帳號</b>

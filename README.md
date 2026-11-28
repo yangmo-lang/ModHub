@@ -142,6 +142,10 @@ npm test         # 掃描/切換邏輯單元測試
     星鐵只能「從遊戲更新」或「貼上網址」；HoYoLAB 登入仍用於養成計算同步
   - 登入狀態留在獨立、持久的瀏覽器分區（`persist:modhub-*`，Chromium 加密保存），ModHub 檔案不存密碼或 token；「登出」會清除該分區
 - 紀錄存在 `%APPDATA%\modhub\gacha\<遊戲>\<帳號>.json`，之後只下載新紀錄；可匯出 / 匯入 JSON
+- **從離愁軒補紀錄**（終末地）：補上 ModHub 開始記錄之前的卡池。按鈕開啟 [離愁軒](https://wiki.lcx.cab/zmd/gacha_tracker.php) 視窗
+  （獨立的 `persist:modhub-lcx` 分區），使用者自己登入後按「讀取並匯入」，ModHub 從頁面上讀出各卡池卡片
+  （卡池名稱、日期、合計、已墊、6★ 與抽數、歪、加急、5★），清理後補到同 UID 的帳號（`electron/gacha/lcx-window.cjs`）；
+  不呼叫離愁軒 API、不保存離愁軒帳號。離愁軒只有出貨摘要，這些卡池標示「離愁軒」、沒有逐抽紀錄
 - 統計：各池總抽數、距上次最高稀有度、限定池本期大保底（終末地 120 / 武器 80）、各稀有度數量、平均出貨抽數、出貨歷史
   - 終末地的免費抽（加急招募）不累計保底，免費抽出的 6★ 也不重置保底；`gift_*` 獎勵不算抽數
 - **圖像化總覽**（亮色報表風格）：總抽數、最高稀有度出率、UP 不歪率；依卡池類型分頁，
@@ -176,6 +180,8 @@ npm test         # 掃描/切換邏輯單元測試
 - 角色分組依 MOD 內容判斷（`mod.ini` 裡替換目標 `target.path=…/actor/<類型>/<代號>/`，例如 `laevat` → 萊萬汀）
 - 停用：EFF 會讀取 `plugin\mods` 底下所有資料夾、不認 `DISABLED_` 前綴，所以停用是把整個 MOD 資料夾移到
   `plugin\mods_disabled\`（相對路徑與 `state.ini` 一起移動），啟用再移回來；遊戲內按 F10 重新載入
+- 按鍵與滑桿：EFF 也支援舊式 `[Key…]`（同樣列出）；Ins 面板的滑桿 `[ControlN]`（`variable`、`label`、`min`、`max`）
+  卡片顯示「🎚 數量」，視窗裡列出範圍與 `state.ini` 裡目前的值（沒調整過顯示 `[Constants]` 的預設值）；只讀不改
 - 遊戲資料夾：預設讀 XXMI 設定裡終末地的 `game_folder`，可在「設定」另外指定
 - 安裝 / 更新 EFF 本體：從 GitHub Releases 下載 `EFF_v<版本>_dll.zip`，比對 GitHub 提供的 SHA-256，
   檢查內容只有 `d3dcompiler_47.dll`、`vulkan-1.dll` 與 `plugin\`，遊戲執行中會拒絕；

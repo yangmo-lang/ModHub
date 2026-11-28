@@ -9,6 +9,7 @@ const hsr = require('./hsr.cjs');
 const login = require('./login.cjs');
 const visual = require('./visual.cjs');
 const lcx = require('./lcx.cjs');
+const { createLcxWindow } = require('./lcx-window.cjs');
 const uigf = require('./uigf.cjs');
 const { normalizeName, toTw } = require('../characters.cjs');
 
@@ -280,6 +281,36 @@ function register(ipcMain, ctx) {
     return login.logout(provider);
   });
 
+  // ---- 離愁軒摘要：在 ModHub 開的視窗裡登入離愁軒，讀取頁面上的卡池卡片 ----
+  let lcxWin = null;
+  const lcxWindow = () => {
+    if (!lcxWin) {
+      const { BrowserWindow } = require('electron');
+      lcxWin = createLcxWindow({ BrowserWindow, parent: () => BrowserWindow.getAllWindows().find((w) => !w.getParentWindow?.() && w.isVisible()) });
+    }
+    return lcxWin;
+  };
+  ipcMain.handle('gacha:lcxOpen', () => { lcxWindow().open(); return true; });
+  ipcMain.handle('gacha:lcxClose', () => { lcxWindow().close(); return true; });
+  ipcMain.handle('gacha:lcxRead', async () => {
+    const data = await lcxWindow().read();
+    const r = applyLcx(data.kinds, data.uid);
+    lcxWindow().close();
+    return { ...r, uid: data.uid, cards: data.cards };
+  });
+
+  /** 離愁軒摘要補到終末地帳號：頁面上有 UID 就找同 UID 的帳號，否則用最近更新的帳號；同名卡池以新讀到的為準 */
+  function applyLcx(kinds, uid) {
+    const list = accounts('EFMI');
+    const same = uid ? list.find((a) => String(a.uid || '') === uid || String(a.id).endsWith(`-${uid}`) || String(a.id) === uid) : null;
+    const acc = same || list[0];
+    if (!acc) throw new Error('請先用帳號更新一次終末地紀錄，再匯入離愁軒摘要');
+    const d = load('EFMI', acc.id);
+    d.history = lcx.mergeInto(d.history, lcx.parse(kinds));
+    save('EFMI', d);
+    return { ...view('EFMI', d), lcxAccount: acc.id, uidMatched: Boolean(same) };
+  }
+
   // format: 'modhub'（預設，ModHub 自己的 JSON）| 'uigf'（UIGF v4.0，星鐵 / 絕區零）
   ipcMain.handle('gacha:export', async (_e, gameId, accountId, format = 'modhub') => {
     const d = load(gameId, accountId);
@@ -322,12 +353,7 @@ function register(ipcMain, ctx) {
     }
     // 離愁軒摘要（各池卡片：{ limited, weapon, standard, newbie, joint }）→ 補到最近的終末地帳號
     if (gameId === 'EFMI' && !j.app && (Array.isArray(j.limited) || Array.isArray(j.weapon))) {
-      const acc = accounts('EFMI')[0];
-      if (!acc) throw new Error('請先用帳號更新一次終末地紀錄，再匯入離愁軒摘要');
-      const d = load('EFMI', acc.id);
-      d.history = lcx.parse(j);
-      save('EFMI', d);
-      return view(gameId, d);
+      return applyLcx(j, '');
     }
     if (j.app !== 'ModHub' || j.game !== gameId || !Array.isArray(j.records) || !j.account?.id) throw new Error('不是這個遊戲的 ModHub 抽卡紀錄檔');
     const old = load(gameId, j.account.id);

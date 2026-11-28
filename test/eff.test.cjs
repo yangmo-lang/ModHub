@@ -200,3 +200,13 @@ test('安裝前分析會標出 EFF MOD 與 EFF 框架', () => {
   fs.writeFileSync(path.join(fw, 'vulkan-1.dll'), 'x');
   assert.equal(installer.analyze(fw).effFramework, true);
 });
+
+test('EFF 滑桿：[ControlN] ＋ state.ini 目前值 ＋ [Constants] 預設值', () => {
+  const ini = `[Mod]\nformat=3\n\n[Constants]\npersist $shape=0\npersist $shape_2=0.5\n\n[Control1]\nvariable=$shape\nlabel=Open\nmin=0\nmax=1\n\n[Control2]\nvariable=$shape_2\nmin=-1\nmax=2\n\n[ControlBroken]\nlabel=no variable\n`;
+  const state = `; EFF runtime preferences\n[Values]\n$shape=0.16093462146818638\n`;
+  const c = eff.parseControls(ini, state);
+  assert.equal(c.length, 2);
+  assert.deepEqual([c[0].label, c[0].variable, c[0].min, c[0].max, c[0].value, c[0].default], ['Open', '$shape', 0, 1, 0.16093462146818638, 0]);
+  assert.deepEqual([c[1].label, c[1].min, c[1].max, c[1].value, c[1].default], ['shape_2', -1, 2, null, 0.5]);
+  assert.equal(eff.parseControls('', '').length, 0);
+});
