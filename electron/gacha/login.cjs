@@ -157,10 +157,11 @@ async function hoyoOfficial(role) {
 
 // ---------------- 登入視窗 / 狀態 ----------------
 
-async function status(provider) {
+/** gameBiz：HoYoLAB 要查哪個遊戲的角色（同一個帳號底下星鐵、絕區零的 UID 不同） */
+async function status(provider, gameBiz) {
   try {
     if (provider === 'hoyolab') {
-      const roles = await hoyoRoles();
+      const roles = await hoyoRoles(gameBiz || 'nap_global');
       return roles ? { loggedIn: true, roles } : { loggedIn: false };
     }
     const r = await hgRoles(provider);

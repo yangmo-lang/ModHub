@@ -269,12 +269,12 @@ function register(ipcMain, ctx) {
 
   // ---- 官方帳號登入 ----
   const providersOf = (gameId) => (gameId === 'EFMI' ? ['gryphline', 'hypergryph'] : HOYO[gameId] ? ['hoyolab'] : []);
-  ipcMain.handle('gacha:loginStatus', async (_e, gameId) => Promise.all(providersOf(gameId).map(async (p) => ({ provider: p, label: login.PROVIDERS[p].label, ...(await login.status(p)) }))));
+  ipcMain.handle('gacha:loginStatus', async (_e, gameId) => Promise.all(providersOf(gameId).map(async (p) => ({ provider: p, label: login.PROVIDERS[p].label, ...(await login.status(p, HOYO[gameId]?.biz)) }))));
   ipcMain.handle('gacha:login', async (e, gameId, provider) => {
     if (!providersOf(gameId).includes(provider)) throw new Error('不支援的帳號類型');
     const { BrowserWindow } = require('electron');
     await login.openLogin(provider, BrowserWindow.fromWebContents(e.sender));
-    return { provider, label: login.PROVIDERS[provider].label, ...(await login.status(provider)) };
+    return { provider, label: login.PROVIDERS[provider].label, ...(await login.status(provider, HOYO[gameId]?.biz)) };
   });
   ipcMain.handle('gacha:logout', async (_e, gameId, provider) => {
     if (!providersOf(gameId).includes(provider)) throw new Error('不支援的帳號類型');
