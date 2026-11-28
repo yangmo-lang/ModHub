@@ -196,6 +196,145 @@ function mergeHistory(vis, history, records, icons = {}) {
   return vis;
 }
 
+/**
+ * 終末地：沒有官方 UP 資料的限定卡池，推斷 UP 與「歪」（含歪出以前的限定角色）
+ *   - 常駐 6★ → 歪；以前卡池的 UP 再次出現 → 歪；離愁軒已標「歪」的照舊
+ *   - 其餘候選裡，實裝順序比之前所有 UP 都新的才可能是本期 UP，取最新的一個；其他 → 歪
+ *   - 判斷不了（沒有實裝順序、又有多個候選）就標成未知
+ * @param opts { standard: Iterable<name>（常駐 6★）, order: Map(normalizeName(name) → 實裝順序) }
+ */
+function refineEndfieldUps(vis, { standard = [], order = new Map() } = {}) {
+  const std = new Set(standard);
+  for (const g of vis.groups) {
+    if (/Standard|Beginner/.test(g.key)) for (const b of g.banners) for (const e of b.entries) if (e.type === 'top') std.add(e.name);
+  }
+  const ord = (name) => (order.has(normalizeName(name)) ? order.get(normalizeName(name)) : null);
+  const g = vis.groups.find((x) => x.key === 'char:E_CharacterGachaPoolType_Special');
+  if (g) {
+    const pastUps = new Set();
+    let maxPast = -Infinity;
+    const remember = (name) => { pastUps.add(name); const o = ord(name); if (o != null) maxPast = Math.max(maxPast, o); };
+    for (const b of [...g.banners].sort((x, y) => x.end - y.end || x.start - y.start)) {
+      const tops = b.entries.filter((e) => e.type === 'top');
+      if (b.upName && !b.upInferred) { remember(b.upName); continue; } // 官方資料
+      for (const e of tops) if (std.has(e.name) || pastUps.has(e.name)) e.isUp = false;
+      const cands = [...new Set(tops.filter((e) => e.isUp !== false).map((e) => e.name))]
+        .filter((n) => ord(n) == null || ord(n) > maxPast);
+      let up = null;
+      if (cands.length === 1) up = cands[0];
+      else if (cands.length > 1) {
+        const known = cands.filter((n) => ord(n) != null).sort((a, z) => ord(z) - ord(a));
+        if (known.length === cands.length) up = known[0];
+      }
+      for (const e of tops) {
+        if (e.isUp === false) continue;
+        if (up) e.isUp = e.name === up;
+        else if (cands.length > 1 && cands.includes(e.name)) e.isUp = null; // 判斷不了
+        else if (!cands.includes(e.name)) e.isUp = false; // 比之前的 UP 還舊的限定角色
+      }
+      if (up) { b.upName = up; b.upInferred = true; remember(up); }
+      b.tops = summarizeTops(b.entries);
+    }
+  }
+  // 重算 UP 不歪率（限定角色 + 武器，不含免費抽）
+  let known = 0;
+  let wins = 0;
+  for (const grp of vis.groups) {
+    if (!/Special|^weapon$|Joint/.test(grp.key)) continue;
+    for (const b of grp.banners) for (const e of b.entries) {
+      if (e.type === 'top' && !e.free && e.isUp != null) { known++; if (e.isUp) wins++; }
+    }
+  }
+  vis.totals = { ...vis.totals, upWin: known ? wins / known : null, upKnown: known };
+  return vis;
+}
+
+// 限定角色 / 限定武器（光錐、音擎）的群組
+const CHAR_LIMITED = new Set(['char:E_CharacterGachaPoolType_Special', 'GACHA_TYPE_CHARACTER_UP', 'GACHA_TYPE_CHARACTER_RETURN', 'zzz:2', 'hsr:11', 'hsr:21']);
+const WEAPON_LIMITED = new Set(['weapon', 'GACHA_TYPE_WEAPON_UP', 'GACHA_TYPE_WEAPON_RETURN', 'zzz:3', 'hsr:12', 'hsr:22']);
+
+/** 平均幾抽出一個 UP：（有抽數的卡池付費抽數 − 目前已墊）÷ 這些卡池出的 UP 數（免費抽出的不算） */
+function upAverage(groups) {
+  let paid = 0;
+  let ups = 0;
+  for (const g of groups) {
+    let gPaid = 0;
+    for (const b of g.banners) {
+      if (b.pulls == null) continue;
+      gPaid += b.pulls - (b.free || 0);
+      ups += b.entries.filter((e) => e.type === 'top' && e.isUp === true && !e.free).length;
+    }
+    paid += Math.max(0, gPaid - (g.pityNow || 0));
+  }
+  return ups ? { avg: paid / ups, ups, pulls: paid } : null;
+}
+
+/** 每個群組與總覽加上「平均 UP 抽數」 */
+function addUpAverages(vis) {
+  if (!vis?.groups) return vis;
+  for (const g of vis.groups) g.avgUp = upAverage([g]);
+  vis.totals = {
+    ...vis.totals,
+    avgUpChar: upAverage(vis.groups.filter((g) => CHAR_LIMITED.has(g.key))),
+    avgUpWeapon: upAverage(vis.groups.filter((g) => WEAPON_LIMITED.has(g.key))),
+  };
+  return vis;
+}
+
+// ---------------- bannerhistory：依時間對照當時的 UP ----------------
+const DAY_MS = 86400000;
+const normUp = (s) => normalizeName(toTw(String(s || '')));
+
+/** 某個時間點開放中的卡池 UP（bannerhistory 的 { start, end, characters }；前後各放寬一天） */
+function activeUps(bhPools, t) {
+  const out = new Set();
+  for (const p of bhPools || []) {
+    if (!p.start) continue;
+    const end = p.end || p.start + 42 * DAY_MS;
+    if (t >= p.start - DAY_MS && t <= end + DAY_MS) for (const c of p.characters || []) { const n = normUp(c.name); if (n) out.add(n); }
+  }
+  return out;
+}
+
+/** 遊戲名稱是否就是某個 UP：完全相同，或遊戲名稱包含 UP 名稱（「星神★阿哈」對「阿哈」；「刃」不會對到「千冶•刃」） */
+function matchesUp(name, ups) {
+  const n = normUp(name);
+  for (const u of ups) if (n === u || (u.length >= 2 && n.includes(u))) return true;
+  return false;
+}
+
+/**
+ * 同一個卡池（星鐵的 gacha_id）的 UP：先找出這期間開放中的所有 UP，
+ * 這個卡池抽到的名字裡是 UP 的，出最多次的那個就是本池 UP（同時開好幾個池時，在別人池歪出的 UP 角色算歪）
+ * @returns (name) => boolean；沒有對得上的卡池資料時回傳 null（沿用舊的判斷）
+ */
+function upJudgeForBanner(recs, bhPools) {
+  if (!bhPools?.length || !recs.length) return null;
+  const ups = new Set();
+  const times = [recs[0].time, recs[recs.length - 1].time, ...recs.filter((r) => r.tier === 'top').map((r) => r.time)];
+  for (const t of times) for (const u of activeUps(bhPools, t)) ups.add(u);
+  if (!ups.size) return null;
+  const hits = new Map();
+  for (const r of recs) if (r.tier === 'top' && matchesUp(r.name, ups)) hits.set(r.name, (hits.get(r.name) || 0) + 1);
+  let upNames = new Set(hits.keys());
+  if (hits.size > 1) {
+    const sorted = [...hits.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted[0][1] > sorted[1][1]) upNames = new Set([sorted[0][0]]);
+  }
+  return (name) => upNames.has(name);
+}
+
+/** 依各群組裡的出貨重算 UP 不歪率（限定池、不含免費抽） */
+function upWinFromGroups(groups, isLimitedKey) {
+  let known = 0;
+  let wins = 0;
+  for (const g of groups) {
+    if (!isLimitedKey(g.key)) continue;
+    for (const b of g.banners) for (const e of b.entries) if (e.type === 'top' && !e.free && e.isUp != null) { known++; if (e.isUp) wins++; }
+  }
+  return { upWin: known ? wins / known : null, upKnown: known };
+}
+
 // ---------------- 絕區零 ----------------
 const ZZZ_TYPES = {
   GACHA_TYPE_CHARACTER_UP: { label: '獨家頻段', order: 1, pool: 'zzz:2', limited: true },
@@ -210,8 +349,8 @@ const PITY_MAX = { 'zzz:2': 90, 'zzz:1': 90, 'zzz:3': 80, 'zzz:5': 80 };
 const verKey = (v) => String(v || '').split('.').map((x) => String(x).padStart(3, '0')).join('.');
 
 /** 有 HoYoLAB 官方統計時用官方資料（含 is_up、全部版本）；沒有就用紀錄推算 */
-function buildZzz(records, official, icons = {}) {
-  if (!official?.types) return buildZzzFromRecords(records, icons);
+function buildZzz(records, official, icons = {}, opts = {}) {
+  if (!official?.types) return buildZzzFromRecords(records, icons, opts);
   const groups = [];
   let upCount = 0;
   let sCount = 0;
@@ -286,7 +425,7 @@ const DAY = 86400000;
 const PHASE_IDLE = 6 * DAY;
 const PHASE_SPAN = 21 * DAY;
 
-function zzzBannersFromRecords(pool, list, roster, icons) {
+function zzzBannersFromRecords(pool, list, roster, icons, bhPools) {
   const limited = pool === 'zzz:2' || pool === 'zzz:3';
   const label = ZZZ_FALLBACK[pool];
   const phases = [];
@@ -301,7 +440,10 @@ function zzzBannersFromRecords(pool, list, roster, icons) {
     ph.recs.forEach((r, i) => {
       pity++;
       if (r.tier === 'top') {
-        entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: limited ? !roster.has(r.name) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
+        // 角色池：有 bannerhistory 資料就看當時開放中的 UP（自選調頻的候選也算歪）；音擎沿用常駐名單
+        const ups = pool === 'zzz:2' && bhPools?.length ? activeUps(bhPools, r.time) : null;
+        const isUp = !limited ? null : ups && ups.size ? matchesUp(r.name, ups) : !roster.has(r.name);
+        entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
         pity = 0;
       }
     });
@@ -331,7 +473,7 @@ function zzzBannersFromRecords(pool, list, roster, icons) {
 
 const fmtMd = (t) => { const d = new Date(t); return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; };
 
-function buildZzzFromRecords(records, icons) {
+function buildZzzFromRecords(records, icons, { bhPools } = {}) {
   const roster = new Set([...ZZZ_STANDARD_S, ...records.filter((r) => r.pool === 'zzz:1' && r.tier === 'top').map((r) => r.name)]);
   const groups = [];
   for (const pool of ['zzz:2', 'zzz:3', 'zzz:1', 'zzz:5']) {
@@ -341,22 +483,21 @@ function buildZzzFromRecords(records, icons) {
     for (const r of list) pity = r.tier === 'top' ? 0 : pity + 1;
     groups.push({
       key: pool, label: ZZZ_FALLBACK[pool], pool, pityNow: pity, pityMax: PITY_MAX[pool], pulls: list.length, free: 0,
-      banners: zzzBannersFromRecords(pool, list, roster, icons),
+      banners: zzzBannersFromRecords(pool, list, roster, icons, bhPools),
     });
   }
   const tops = records.filter((r) => r.tier === 'top');
-  const lim = tops.filter((r) => r.pool === 'zzz:2' || r.pool === 'zzz:3');
   return {
-    totals: { pulls: records.length, free: 0, tops: tops.length, topRate: records.length ? tops.length / records.length : 0, upWin: lim.length ? lim.filter((r) => !roster.has(r.name)).length / lim.length : null, upKnown: lim.length, topLabel: 'S', source: 'records' },
+    totals: { pulls: records.length, free: 0, tops: tops.length, topRate: records.length ? tops.length / records.length : 0, ...upWinFromGroups(groups, (k) => k === 'zzz:2' || k === 'zzz:3'), topLabel: 'S', source: 'records' },
     groups,
   };
 }
 
 // ---------------- 崩壞：星穹鐵道 ----------------
 const HSR_POOLS = [
-  { key: 'hsr:11', label: '角色活動躍遷', pityMax: 90, limited: true },
+  { key: 'hsr:11', label: '角色活動躍遷', pityMax: 90, limited: true, chars: true },
   { key: 'hsr:12', label: '光錐活動躍遷', pityMax: 80, limited: true },
-  { key: 'hsr:21', label: '聯動角色躍遷', pityMax: 90, limited: true },
+  { key: 'hsr:21', label: '聯動角色躍遷', pityMax: 90, limited: true, chars: true },
   { key: 'hsr:22', label: '聯動光錐躍遷', pityMax: 80, limited: true },
   { key: 'hsr:1', label: '群星躍遷', pityMax: 90 },
   { key: 'hsr:2', label: '始發躍遷', pityMax: 50 },
@@ -369,7 +510,36 @@ const HSR_STANDARD_5 = ['姬子', '瓦爾特', '布洛妮婭', '傑帕德', '克
  * 星鐵的逐抽紀錄每筆都有 gacha_id（卡池 id），所以限定池直接依 gacha_id 分期；
  * 同一類型的卡池共用保底（跨期累計），期末沒出的抽數 =「已墊」。卡池名稱 = 該期出過的 UP。
  */
-function hsrBanners(pool, list, roster, icons) {
+/**
+ * 從紀錄學習「後來加入常駐」的角色 / 光錐（例如刃）：星鐵歪的時候只會出常駐，
+ * 所以同一個限定卡池（gacha_id）出了兩個以上非常駐的名字時，出最多次的是 UP，其他的就是常駐。
+ * 回傳 Map(名字 → 第一次確定是常駐的時間)；在那之前（例如它自己的限定池）仍算 UP。
+ */
+function learnStandardSince(records, limitedPools, isBaseStd) {
+  const byBanner = new Map();
+  for (const r of records) {
+    if (r.tier !== 'top' || !r.bannerId || !limitedPools.has(r.pool) || isBaseStd(r.name)) continue;
+    const k = `${r.pool}|${r.bannerId}`;
+    if (!byBanner.has(k)) byBanner.set(k, []);
+    byBanner.get(k).push(r);
+  }
+  const since = new Map();
+  for (const recs of byBanner.values()) {
+    const count = new Map();
+    for (const r of recs) count.set(r.name, (count.get(r.name) || 0) + 1);
+    if (count.size < 2) continue;
+    const sorted = [...count.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted[0][1] === sorted[1][1]) continue; // 次數一樣分不出誰是 UP
+    for (const r of recs) {
+      if (r.name === sorted[0][0]) continue;
+      if (!since.has(r.name) || r.time < since.get(r.name)) since.set(r.name, r.time);
+    }
+  }
+  return since;
+}
+
+/** @param isStd(name, time) 是否為常駐（歪） */
+function hsrBanners(pool, list, isStd, icons, bhPools) {
   const byId = new Map();
   for (const r of list) {
     const k = pool.limited ? r.bannerId || 'unknown' : pool.key;
@@ -381,10 +551,12 @@ function hsrBanners(pool, list, roster, icons) {
     .sort((a, b) => a[1][0].time - b[1][0].time)
     .map(([gid, recs]) => {
       const entries = [];
+      // 角色池：用 bannerhistory 對照這期的 UP（星緣相邀的角色也算歪）；沒有資料或光錐池沿用常駐判斷
+      const judge = pool.limited && pool.chars ? upJudgeForBanner(recs, bhPools) : null;
       recs.forEach((r, i) => {
         pity++;
         if (r.tier === 'top') {
-          entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: pool.limited ? !roster.has(r.name) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
+          entries.push({ type: 'top', name: r.name, icon: iconOf(icons, r.name), pity, isUp: pool.limited ? (judge ? judge(r.name) : !isStd(r.name, r.time)) : null, free: false, time: r.time, nth: i + 1, rarity: r.rarity });
           pity = 0;
         }
       });
@@ -412,20 +584,27 @@ function hsrBanners(pool, list, roster, icons) {
   return banners.reverse();
 }
 
-function buildHsr(records, icons = {}) {
-  const roster = new Set([...HSR_STANDARD_5, ...records.filter((r) => r.pool === 'hsr:1' && r.tier === 'top').map((r) => r.name)]);
+function buildHsr(records, icons = {}, { bhPools } = {}) {
+  const roster = new Set(HSR_STANDARD_5);
+  const limitedPools = new Set(HSR_POOLS.filter((p) => p.limited).map((p) => p.key));
+  const learned = learnStandardSince(records, limitedPools, (n) => roster.has(n));
+  // 群星躍遷出過的也是常駐，但從它第一次在群星出現的時間起才算（之前可能還是限定）
+  for (const r of records) {
+    if (r.pool !== 'hsr:1' || r.tier !== 'top' || roster.has(r.name)) continue;
+    if (!learned.has(r.name) || r.time < learned.get(r.name)) learned.set(r.name, r.time);
+  }
+  const isStd = (name, time) => roster.has(name) || (learned.has(name) && time >= learned.get(name));
   const groups = [];
   HSR_POOLS.forEach((pool, order) => {
     const list = records.filter((r) => r.pool === pool.key);
     if (!list.length) return;
     let pity = 0;
     for (const r of list) pity = r.tier === 'top' ? 0 : pity + 1;
-    groups.push({ key: pool.key, label: pool.label, order, pool: pool.key, pityNow: pity, pityMax: pool.pityMax, pulls: list.length, free: 0, banners: hsrBanners(pool, list, roster, icons) });
+    groups.push({ key: pool.key, label: pool.label, order, pool: pool.key, pityNow: pity, pityMax: pool.pityMax, pulls: list.length, free: 0, banners: hsrBanners(pool, list, isStd, icons, bhPools) });
   });
   const tops = records.filter((r) => r.tier === 'top');
-  const lim = tops.filter((r) => HSR_POOLS.find((p) => p.key === r.pool)?.limited);
   return {
-    totals: { pulls: records.length, free: 0, tops: tops.length, topRate: records.length ? tops.length / records.length : 0, upWin: lim.length ? lim.filter((r) => !roster.has(r.name)).length / lim.length : null, upKnown: lim.length, topLabel: '5★', source: 'records' },
+    totals: { pulls: records.length, free: 0, tops: tops.length, topRate: records.length ? tops.length / records.length : 0, ...upWinFromGroups(groups, (k) => HSR_POOLS.find((p) => p.key === k)?.limited), topLabel: '5★', source: 'records' },
     groups,
   };
 }
@@ -447,4 +626,4 @@ function pullGrid(records, icons = {}, { pool, bannerId, isWeaponGroup } = {}) {
   return filtered.reverse();
 }
 
-module.exports = { mergeHistory, buildEndfield, buildZzz, buildZzzFromRecords, buildHsr, pullGrid, ZZZ_TYPES, HSR_STANDARD_5 };
+module.exports = { activeUps, matchesUp, upJudgeForBanner, learnStandardSince, mergeHistory, refineEndfieldUps, addUpAverages, upAverage, buildEndfield, buildZzz, buildZzzFromRecords, buildHsr, pullGrid, ZZZ_TYPES, HSR_STANDARD_5 };

@@ -685,3 +685,5 @@ kbd { font-family: inherit; font-size: 11px; padding: 0 5px; border: 1px solid v
 .lcx-bar { display: flex; align-items: center; gap: 10px; margin: 0 16px 10px; padding: 8px 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--panel); font-size: 13px; }
 .lcx-bar .spacer { flex: 1; }
 .lcx-bar .btn.small { margin-bottom: 0; flex: none; }
+.g-avg { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.g-avg b { color: var(--accent-2); font-size: 15px; }

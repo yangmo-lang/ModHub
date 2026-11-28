@@ -133,3 +133,97 @@ test('摘要合併：同名卡池以新的為準，標示來源與備註', () =>
   assert.equal(list[0].source, '截圖');
   assert.equal(list[0].note, '缺頁');
 });
+
+test('終末地：推斷沒有官方資料的卡池 UP，歪出以前的限定角色也算歪；平均 UP 抽數', () => {
+  const top = (name, extra = {}) => ({ type: 'top', name, isUp: true, free: false, ...extra });
+  const vis = {
+    totals: { pulls: 0, upWin: null, upKnown: 0 },
+    groups: [
+      { key: 'char:E_CharacterGachaPoolType_Special', pityNow: 10, banners: [
+        { name: 'D', start: 40, end: 41, pulls: 60, free: 0, upName: '小刻', entries: [top('小刻'), top('祀', { isUp: false })] },
+        { name: 'C', start: 30, end: 31, pulls: 80, free: 10, entries: [top('訣'), top('梨諾'), top('黎風'), top('梨諾', { free: true })] },
+        { name: 'B', start: 20, end: 21, pulls: null, entries: [top('洛茜'), top('莊方宜')] },
+        { name: 'A', start: 10, end: 11, pulls: 100, free: 0, entries: [top('洛茜'), top('洛茜')] },
+      ] },
+      { key: 'char:E_CharacterGachaPoolType_Standard', banners: [{ name: 'S', pulls: 10, entries: [top('別禮', { isUp: null })] }] },
+    ],
+  };
+  const order = new Map([['洛茜', 27], ['莊方宜', 28], ['訣', 31], ['梨諾', 32], ['小刻', 36], ['祀', 34]].map(([n, o]) => [n, o]));
+  v.refineEndfieldUps(vis, { standard: ['黎風'], order });
+  const g = vis.groups[0];
+  const marks = (b) => b.entries.filter((e) => e.type === 'top').map((e) => `${e.name}${e.isUp === true ? '+' : e.isUp === false ? '-' : '?'}`).join(' ');
+  assert.equal(marks(g.banners[3]), '洛茜+ 洛茜+');
+  assert.equal(marks(g.banners[2]), '洛茜- 莊方宜+', '以前的 UP 再出現算歪');
+  assert.equal(marks(g.banners[1]), '訣- 梨諾+ 黎風- 梨諾+', '多個新限定取實裝最新的；常駐算歪');
+  assert.equal(g.banners[1].upName, '梨諾');
+  assert.equal(g.banners[1].upInferred, true);
+  assert.equal(marks(g.banners[0]), '小刻+ 祀-', '有官方資料的不動');
+  // 不歪率：A 2/2、B 1/2、C 1/3（免費抽不算）、D 1/2 → 5/9
+  assert.equal(vis.totals.upKnown, 9);
+  assert.equal(vis.totals.upWin, 5 / 9);
+
+  v.addUpAverages(vis);
+  // 有抽數的卡池：A 100 + C 70 + D 60 = 230，扣已墊 10 → 220；UP（不含免費）A2 + C1 + D1 = 4
+  assert.deepEqual(vis.totals.avgUpChar, { avg: 55, ups: 4, pulls: 220 });
+  assert.equal(vis.totals.avgUpWeapon, null);
+  assert.equal(vis.groups[1].avgUp, null);
+});
+
+test('推斷：沒有實裝順序又有多個候選時標成未知', () => {
+  const vis = { totals: {}, groups: [{ key: 'char:E_CharacterGachaPoolType_Special', banners: [
+    { name: 'X', start: 1, end: 2, pulls: 10, entries: [{ type: 'top', name: '甲', isUp: true }, { type: 'top', name: '乙', isUp: true }] },
+  ] }] };
+  v.refineEndfieldUps(vis, {});
+  assert.deepEqual(vis.groups[0].banners[0].entries.map((e) => e.isUp), [null, null]);
+});
+
+test('星鐵：後來加入常駐的角色（刃）從確定的時間起算歪，它自己的限定池仍算 UP', () => {
+  let t = 0;
+  const pulls = (bannerId, seq, pool = 'hsr:11') => seq.map((name) => ({ id: String(++t), pool, bannerId, time: t * 1000, name: name || '路人', tier: name ? 'top' : 'low', rarity: name ? 5 : 3 }));
+  const records = [
+    ...pulls('blade-1', [null, '刃']), // 刃自己的限定池
+    ...pulls('pearl', [null, '真珠', '真珠', '刃', '真珠']), // 刃在別人的池出現 → 常駐
+    ...pulls('aha', ['星神★阿哈', null, '刃', '星神★阿哈']),
+    ...pulls('feixiao', ['緋英', '姬子']),
+    ...pulls('tie', ['甲', '乙']), // 次數一樣，分不出來
+  ];
+  const vis = v.buildHsr(records, {});
+  const g = vis.groups.find((x) => x.key === 'hsr:11');
+  const byName = Object.fromEntries(g.banners.map((b) => [b.bannerId, b.entries.map((e) => `${e.name}${e.isUp ? '+' : '-'}`).reverse().join(' ')]));
+  assert.equal(byName['blade-1'], '刃+');
+  assert.equal(byName.pearl, '真珠+ 真珠+ 刃- 真珠+');
+  assert.equal(byName.aha, '星神★阿哈+ 刃- 星神★阿哈+');
+  assert.equal(byName.feixiao, '緋英+ 姬子-');
+  assert.equal(g.banners.find((b) => b.bannerId === 'aha').name, '星神★阿哈', '卡池名稱不再列出刃');
+  const since = v.learnStandardSince(records, new Set(['hsr:11']), () => false);
+  assert.ok(since.has('刃') && !since.has('甲') && !since.has('乙'));
+});
+
+test('星鐵：用 bannerhistory 對照當時的 UP（星緣相邀的刃算歪、千冶•刃不會誤配）', () => {
+  const D = 86400000;
+  const bhPools = [
+    { start: 100 * D, end: 140 * D, characters: [{ name: '真珠' }] },
+    { start: 120 * D, end: 140 * D, characters: [{ name: '千冶•刃' }] },
+    { start: 141 * D, end: 180 * D, characters: [{ name: '阿哈' }] },
+  ];
+  assert.equal(v.matchesUp('星神★阿哈', new Set(['阿哈'])), true);
+  assert.equal(v.matchesUp('刃', v.activeUps(bhPools, 130 * D)), false);
+  assert.equal(v.matchesUp('千冶•刃', v.activeUps(bhPools, 130 * D)), true);
+  let t = 0;
+  const recs = (bannerId, day, seq) => seq.map((name) => ({ id: String(++t), pool: 'hsr:11', bannerId, time: day * D + t * 1000, name: name || '路人', tier: name ? 'top' : 'low', rarity: name ? 5 : 3 }));
+  const records = [
+    ...recs('pearl', 110, ['刃', null, '真珠']), // 只出過一次刃也能判斷
+    ...recs('qianye', 125, ['千冶•刃', '真珠']), // 千冶池裡歪出真珠（同時開的另一池 UP）
+    ...recs('aha', 150, ['刃', '星神★阿哈']),
+  ];
+  const vis = v.buildHsr(records, {}, { bhPools });
+  const g = vis.groups.find((x) => x.key === 'hsr:11');
+  const marks = Object.fromEntries(g.banners.map((b) => [b.bannerId, b.entries.map((e) => `${e.name}${e.isUp ? '+' : '-'}`).reverse().join(' ')]));
+  assert.equal(marks.pearl, '刃- 真珠+');
+  assert.equal(marks.qianye, '千冶•刃+ 真珠+', '同時開的兩個 UP 各一次分不出來時都算 UP');
+  assert.equal(marks.aha, '刃- 星神★阿哈+');
+  assert.equal(vis.totals.upKnown, 6);
+  // 沒有 bannerhistory 資料時沿用常駐名單（刃不在名單 → 算 UP）
+  const old = v.buildHsr(recs('x', 200, ['刃']), {}, {});
+  assert.equal(old.groups[0].banners[0].entries[0].isUp, true);
+});

@@ -10,8 +10,10 @@ const login = require('./login.cjs');
 const visual = require('./visual.cjs');
 const lcx = require('./lcx.cjs');
 const { createLcxWindow } = require('./lcx-window.cjs');
+const schedule = require('../schedule.cjs');
+const { UA } = require('../net.cjs');
 const uigf = require('./uigf.cjs');
-const { normalizeName, toTw } = require('../characters.cjs');
+const { normalizeName, toTw, loadCache: loadCharCache } = require('../characters.cjs');
 
 const SUPPORTED = { SRMI: 'hsr', EFMI: 'endfield', ZZMI: 'zzz' };
 
@@ -228,6 +230,40 @@ function register(ipcMain, ctx) {
     return map;
   }
 
+  // ---- bannerhistory 的卡池歷史（星鐵 / 絕區零）：用來對照每一抽當時的 UP，快取 12 小時，失敗就用舊的 ----
+  async function bannerPools(gameId) {
+    if (gameId !== 'SRMI' && gameId !== 'ZZMI') return [];
+    const f = path.join(dir(gameId), '_meta', 'bannerhistory.json');
+    let cache = null;
+    try { cache = JSON.parse(fs.readFileSync(f, 'utf8')); } catch {}
+    if (cache && Date.now() - cache.fetchedAt < 12 * 3600 * 1000) return cache.pools;
+    try {
+      const r = await fetch(schedule.bhUrl(gameId), { headers: { 'User-Agent': UA, Accept: 'text/html' } });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const pools = schedule.parseBannerHistory(await r.text())
+        .filter((p) => p.start)
+        .map((p) => ({ start: p.start, end: p.end, version: p.version, characters: p.characters.map((c) => ({ name: c.name })) }));
+      if (!pools.length) throw new Error('沒有卡池資料');
+      fs.mkdirSync(path.dirname(f), { recursive: true });
+      fs.writeFileSync(f, JSON.stringify({ fetchedAt: Date.now(), pools }));
+      return pools;
+    } catch {
+      return cache?.pools || [];
+    }
+  }
+
+  /** 終末地角色的實裝順序（圖鑑快取的 meta.order），名稱用簡繁兩種寫法都對得到 */
+  function endfieldOrder() {
+    const order = new Map();
+    const data = loadCharCache(ctx.userData(), 'EFMI');
+    for (const c of data?.characters || []) {
+      const o = c.meta?.order;
+      if (o == null) continue;
+      for (const n of [c.name, c.nameTw, toTw(c.name || '')]) if (n) order.set(normalizeName(n), o);
+    }
+    return order;
+  }
+
   ipcMain.handle('gacha:visual', async (_e, gameId, accountId) => {
     const d = load(gameId, accountId);
     if (!d) return null;
@@ -243,10 +279,17 @@ function register(ipcMain, ctx) {
         for (const x of [...(p.cur_records || []), ...(p.cur_item_list || [])]) if (x.icon && x.name) icons[normalizeName(x.name)] = icons[normalizeName(x.name)] || x.icon;
       }
     }
-    const v = gameId === 'EFMI'
-      ? visual.mergeHistory(visual.buildEndfield(d.records, loadPools(), icons), d.history, d.records, icons)
-      : gameId === 'SRMI' ? visual.buildHsr(d.records, icons)
-        : visual.buildZzz(d.records, d.official, icons);
+    let v;
+    if (gameId === 'EFMI') {
+      const pools = loadPools();
+      v = visual.mergeHistory(visual.buildEndfield(d.records, pools, icons), d.history, d.records, icons);
+      // 沒有官方 UP 資料的卡池：依常駐名單與角色實裝順序推斷 UP / 歪（包含歪出以前的限定角色）
+      v = visual.refineEndfieldUps(v, { standard: pools.standard?.all6 || [], order: endfieldOrder() });
+    } else {
+      const bhPools = await bannerPools(gameId);
+      v = gameId === 'SRMI' ? visual.buildHsr(d.records, icons, { bhPools }) : visual.buildZzz(d.records, d.official, icons, { bhPools });
+    }
+    v = visual.addUpAverages(v);
     return {
       account: d.account,
       updatedAt: d.updatedAt,
