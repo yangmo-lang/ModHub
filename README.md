@@ -114,7 +114,8 @@ npm test         # 掃描/切換邏輯單元測試
   - 經驗曲線與經驗道具數值：`electron/planner/exp-constants.json`（由星鐵 / 鳴潮公開遊戲設定表與絕區零道具說明整理）
 - 參考 CEP 終末地規劃器（end.canmoe.com）的功能設計；CEP 為 AGPL-3.0，ModHub 沒有複製其程式或資料
 - 已知限制：星鐵、鳴潮、絕區零角色升級時消耗的貨幣未計入（遊戲資料未提供）
-- **從 HoYoLAB 同步**（需先在「抽卡紀錄 → 官方帳號」登入 HoYoLAB）
+- **從 HoYoLAB 同步**（需先在該遊戲的「抽卡紀錄 → 官方帳號」登入 HoYoLAB；星鐵與絕區零分開登入，
+  分別存在 `persist:modhub-hoyolab-sr` 與 `persist:modhub-hoyolab`，可以是不同的 HoYoLAB 帳號）
   - 星鐵：HoYoLAB 遊戲工具 `event/rpgcultivate`（`avatar/list`、`calc/avatar/detail`、`calc/compute`）
     → 等級、技能、已點亮行跡、裝備光錐等級；**背包**：`calc/compute` 回傳的 `user_owns_materials`（相關材料的實際持有數）
   - 絕區零：HoYoLAB 戰績 `game_record_zzz`（`avatar/basic`、`avatar/info`）→ 等級、技能（含核心技）、裝備音擎等級；國際服沒有背包資料
@@ -153,7 +154,8 @@ npm test         # 掃描/切換邏輯單元測試
   - 終末地：UP 角色與立繪來自公開的 `ef-webview…/api/content`（近期卡池）；查不到的舊卡池（含離愁軒補充的）由
     `refineEndfieldUps` 推斷：常駐 6★ 與以前卡池的 UP 算歪；其餘候選中實裝順序（圖鑑 `meta.order`）比之前所有 UP 都新的才是本期 UP，
     取最新的一個，其他算歪（歪出以前的限定角色也算）；判斷不了標成未知
-  - 平均 UP 抽數：（有抽數的卡池付費抽數 − 目前已墊）÷ 這些卡池出的 UP 數，總覽分「限定角色」與「限定武器 / 光錐 / 音擎」，各卡池頁也有
+  - 平均 UP 抽數：花掉的抽數 ÷ UP 數（免費抽出的不算）。知道總抽數的卡池用付費抽數、最後扣掉目前已墊；
+    只有出貨抽數的（絕區零官方統計、離愁軒「之前」那段）用出貨抽數加總。總覽分「限定角色」與「限定武器 / 光錐 / 音擎」，各卡池頁也有
   - 絕區零：登入 HoYoLAB 時另抓官方調頻查詢工具的統計（`/api/zzz/index`、`hist_pool_stat`、`cur_pool_stat`），
     含全部版本、官方 is_up 與圖示；逐抽紀錄 API 只保留約 6 個月
   - 「從遊戲更新」時若 HoYoLAB 已登入同一個 uid，也會一併更新官方統計

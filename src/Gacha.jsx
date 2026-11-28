@@ -208,12 +208,12 @@ export default function Gacha({ gameId, gameName, showToast }) {
               <div className="g-stat"><b>{pct(vis.totals.topRate)}</b><span>{T.top} 出率（含保底）</span></div>
               <div className="g-stat"><b>{pct(vis.totals.upWin)}</b><span>UP 不歪率</span></div>
               {vis.totals.avgUpChar && (
-                <div className="g-stat" title={`限定角色卡池：${vis.totals.avgUpChar.pulls} 抽（扣掉目前已墊）÷ ${vis.totals.avgUpChar.ups} 個 UP`}>
+                <div className="g-stat" title={`限定角色卡池：${vis.totals.avgUpChar.pulls} 抽（不含目前已墊）÷ ${vis.totals.avgUpChar.ups} 個 UP`}>
                   <b>{vis.totals.avgUpChar.avg.toFixed(1)}</b><span>平均限定{T.top}角色抽數</span>
                 </div>
               )}
               {vis.totals.avgUpWeapon && (
-                <div className="g-stat" title={`限定${WEAPON_WORD[gameId] || '武器'}卡池：${vis.totals.avgUpWeapon.pulls} 抽（扣掉目前已墊）÷ ${vis.totals.avgUpWeapon.ups} 個 UP`}>
+                <div className="g-stat" title={`限定${WEAPON_WORD[gameId] || '武器'}卡池：${vis.totals.avgUpWeapon.pulls} 抽（不含目前已墊）÷ ${vis.totals.avgUpWeapon.ups} 個 UP`}>
                   <b>{vis.totals.avgUpWeapon.avg.toFixed(1)}</b><span>平均限定{WEAPON_WORD[gameId] || '武器'}抽數</span>
                 </div>
               )}
@@ -279,7 +279,7 @@ function GroupView({ group, T, onOpen }) {
     <>
       {group.avgUp && (
         <p className="g-avg">
-          這個卡池平均 <b>{group.avgUp.avg.toFixed(1)}</b> 抽出一個 UP（{group.avgUp.ups} 個 UP、{group.avgUp.pulls} 抽，已扣掉目前已墊；只算有抽數的卡池）
+          這個卡池平均 <b>{group.avgUp.avg.toFixed(1)}</b> 抽出一個 UP（{group.avgUp.ups} 個 UP、{group.avgUp.pulls} 抽，不含目前已墊）
         </p>
       )}
       <div className="g-cols">

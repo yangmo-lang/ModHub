@@ -28,8 +28,21 @@ const PROVIDERS = {
     partition: 'persist:modhub-hoyolab',
     loginUrl: 'https://www.hoyolab.com/home',
     bindingBases: ['https://api-account-os.hoyolab.com', 'https://api-account-os.hoyoverse.com'],
+    gameBiz: 'nap_global',
+  },
+  // 星鐵（HoYoLAB，獨立登入：星鐵和絕區零可以是不同的 HoYoLAB 帳號）
+  'hoyolab-sr': {
+    label: 'HoYoLAB',
+    partition: 'persist:modhub-hoyolab-sr',
+    loginUrl: 'https://www.hoyolab.com/home',
+    bindingBases: ['https://api-account-os.hoyolab.com', 'https://api-account-os.hoyoverse.com'],
+    gameBiz: 'hkrpg_global',
   },
 };
+
+const isHoyo = (provider) => provider === 'hoyolab' || provider === 'hoyolab-sr';
+/** 遊戲（game_biz）→ 用哪個 HoYoLAB 登入分區 */
+const hoyoProviderFor = (gameBiz) => (gameBiz === 'hkrpg_global' ? 'hoyolab-sr' : 'hoyolab');
 
 const ses = (provider) => session.fromPartition(PROVIDERS[provider].partition);
 
@@ -103,11 +116,12 @@ async function hgU8Token(provider, uid, oauth) {
 
 /** HoYoLAB 帳號底下某個遊戲的角色（gameBiz：nap_global 絕區零、hkrpg_global 星鐵） */
 async function hoyoRoles(gameBiz = 'nap_global') {
-  for (const base of PROVIDERS.hoyolab.bindingBases) {
+  const provider = hoyoProviderFor(gameBiz);
+  for (const base of PROVIDERS[provider].bindingBases) {
     try {
-      const j = await sfetchJson('hoyolab', `${base}/account/binding/api/getUserGameRolesByCookieToken?game_biz=${gameBiz}`);
+      const j = await sfetchJson(provider, `${base}/account/binding/api/getUserGameRolesByCookieToken?game_biz=${gameBiz}`);
       if (j.retcode === 0) {
-        return (j.data?.list || []).map((r) => ({ uid: String(r.game_uid), name: r.nickname || '', region: r.region, server: r.region_name || r.region, level: r.level, base, gameBiz }));
+        return (j.data?.list || []).map((r) => ({ uid: String(r.game_uid), name: r.nickname || '', region: r.region, server: r.region_name || r.region, level: r.level, base, gameBiz, provider }));
       }
       if (j.retcode === -100 || /login|登入|登录/i.test(j.message || '')) return null;
     } catch {}
@@ -116,7 +130,7 @@ async function hoyoRoles(gameBiz = 'nap_global') {
 }
 
 async function hoyoAuthKey(role) {
-  const j = await sfetchJson('hoyolab', `${role.base}/account/binding/api/genAuthKeyByCookieToken`, {
+  const j = await sfetchJson(role.provider || hoyoProviderFor(role.gameBiz), `${role.base}/account/binding/api/genAuthKeyByCookieToken`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ game_biz: role.gameBiz || 'nap_global', region: role.region, game_uid: role.uid, auth_appid: 'webview_gacha' }),
@@ -158,10 +172,10 @@ async function hoyoOfficial(role) {
 // ---------------- 登入視窗 / 狀態 ----------------
 
 /** gameBiz：HoYoLAB 要查哪個遊戲的角色（同一個帳號底下星鐵、絕區零的 UID 不同） */
-async function status(provider, gameBiz) {
+async function status(provider) {
   try {
-    if (provider === 'hoyolab') {
-      const roles = await hoyoRoles(gameBiz || 'nap_global');
+    if (isHoyo(provider)) {
+      const roles = await hoyoRoles(PROVIDERS[provider].gameBiz);
       return roles ? { loggedIn: true, roles } : { loggedIn: false };
     }
     const r = await hgRoles(provider);
@@ -207,7 +221,7 @@ function openLogin(provider, parent) {
     // 輪詢是否已登入：鷹角只查帳號 token（1 個請求），HoYoLAB 查角色列表
     const timer = setInterval(async () => {
       if (win.isDestroyed()) return finish(false);
-      const ok = provider === 'hoyolab' ? Boolean(await hoyoRoles()) : Boolean(await hgAccountToken(provider));
+      const ok = isHoyo(provider) ? Boolean(await hoyoRoles(p.gameBiz)) : Boolean(await hgAccountToken(provider));
       if (ok) finish(true);
     }, 2000);
     win.on('closed', () => finish(false));
@@ -225,9 +239,9 @@ function flushAll() {
   return Promise.all(Object.keys(PROVIDERS).map((p) => ses(p).cookies.flushStore().catch(() => {})));
 }
 
-/** 用 HoYoLAB 登入分區送出請求（給其他模組用，例如養成同步） */
-function hoyoFetchJson(url, init) {
-  return sfetchJson('hoyolab', url, { ...init, headers: { 'x-rpc-language': 'zh-tw', ...(init?.headers || {}) } });
+/** 用某個遊戲的 HoYoLAB 登入分區送出請求（給其他模組用，例如養成同步） */
+function hoyoFetchJson(url, init, gameBiz = 'nap_global') {
+  return sfetchJson(hoyoProviderFor(gameBiz), url, { ...init, headers: { 'x-rpc-language': 'zh-tw', ...(init?.headers || {}) } });
 }
 
-module.exports = { PROVIDERS, flushAll, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };
+module.exports = { PROVIDERS, isHoyo, hoyoProviderFor, flushAll, status, openLogin, logout, hgRoles, hgU8Token, hoyoRoles, hoyoAuthKey, hoyoOfficial, hoyoFetchJson };

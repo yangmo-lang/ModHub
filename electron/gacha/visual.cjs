@@ -253,18 +253,31 @@ function refineEndfieldUps(vis, { standard = [], order = new Map() } = {}) {
 const CHAR_LIMITED = new Set(['char:E_CharacterGachaPoolType_Special', 'GACHA_TYPE_CHARACTER_UP', 'GACHA_TYPE_CHARACTER_RETURN', 'zzz:2', 'hsr:11', 'hsr:21']);
 const WEAPON_LIMITED = new Set(['weapon', 'GACHA_TYPE_WEAPON_UP', 'GACHA_TYPE_WEAPON_RETURN', 'zzz:3', 'hsr:12', 'hsr:22']);
 
-/** 平均幾抽出一個 UP：（有抽數的卡池付費抽數 − 目前已墊）÷ 這些卡池出的 UP 數（免費抽出的不算） */
+/**
+ * 平均幾抽出一個 UP ＝ 花掉的抽數 ÷ UP 數（免費抽出的不算）
+ *   - 知道總抽數的卡池：付費抽數（含期末墊著、帶到下一期的抽數），整個群組最後扣掉目前已墊
+ *   - 不知道總抽數的卡池（絕區零官方統計、離愁軒「之前」那段）：每一隻的出貨抽數加總
+ */
 function upAverage(groups) {
   let paid = 0;
   let ups = 0;
   for (const g of groups) {
     let gPaid = 0;
+    let latestKnown = false;
+    const newest = g.banners.reduce((a, b) => (!a || (b.end || 0) > (a.end || 0) ? b : a), null);
     for (const b of g.banners) {
-      if (b.pulls == null) continue;
-      gPaid += b.pulls - (b.free || 0);
-      ups += b.entries.filter((e) => e.type === 'top' && e.isUp === true && !e.free).length;
+      const tops = b.entries.filter((e) => e.type === 'top' && !e.free);
+      if (b.pulls != null) {
+        gPaid += b.pulls - (b.free || 0);
+        if (b === newest) latestKnown = true;
+      } else if (tops.every((e) => Number(e.pity) > 0)) {
+        gPaid += tops.reduce((s, e) => s + Number(e.pity), 0);
+      } else {
+        continue; // 抽數完全不明的卡池不列入
+      }
+      ups += tops.filter((e) => e.isUp === true).length;
     }
-    paid += Math.max(0, gPaid - (g.pityNow || 0));
+    paid += Math.max(0, gPaid - (latestKnown ? g.pityNow || 0 : 0));
   }
   return ups ? { avg: paid / ups, ups, pulls: paid } : null;
 }

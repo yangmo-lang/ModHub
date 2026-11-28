@@ -157,11 +157,11 @@ function register(ipcMain, ctx) {
     const biz = gameId === 'SRMI' ? 'hkrpg_global' : gameId === 'ZZMI' ? 'nap_global' : null;
     if (!biz) throw new Error('這個遊戲沒有 HoYoLAB 同步');
     const roles = await login.hoyoRoles(biz);
-    if (!roles) throw new Error('HoYoLAB 尚未登入：請到「抽卡紀錄」的「官方帳號」登入 HoYoLAB');
+    if (!roles) throw new Error('HoYoLAB 尚未登入：請到這個遊戲的「抽卡紀錄」→「官方帳號」登入 HoYoLAB（星鐵、絕區零分開登入）');
     if (!roles.length) throw new Error(`這個 HoYoLAB 帳號沒有綁定${gameId === 'SRMI' ? '星鐵' : '絕區零'}角色`);
     const args = {
       roles,
-      fetchJson: login.hoyoFetchJson,
+      fetchJson: (url, init) => login.hoyoFetchJson(url, init, biz), // 星鐵、絕區零各用自己的 HoYoLAB 登入
       entries: plan.entries || [],
       modelOf: (e) => model(gameId, e.kind, e.id),
       onProgress: (stage) => ctx.emit('planner:progress', { gameId, stage, done: 0, total: 1 }),

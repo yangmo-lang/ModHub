@@ -227,3 +227,16 @@ test('星鐵：用 bannerhistory 對照當時的 UP（星緣相邀的刃算歪�
   const old = v.buildHsr(recs('x', 200, ['刃']), {}, {});
   assert.equal(old.groups[0].banners[0].entries[0].isUp, true);
 });
+
+test('平均 UP 抽數：只有出貨抽數的卡池（絕區零官方統計）用出貨抽數加總', () => {
+  const vis = { totals: {}, groups: [
+    { key: 'GACHA_TYPE_CHARACTER_UP', pityNow: 3, banners: [
+      { pulls: null, entries: [{ type: 'top', name: 'A', pity: 77, isUp: true }, { type: 'top', name: 'B', pity: 80, isUp: false }] },
+      { pulls: null, entries: [{ type: 'top', name: 'C', pity: 60, isUp: true }] },
+    ] },
+    { key: 'GACHA_TYPE_WEAPON_UP', pityNow: 0, banners: [{ pulls: null, entries: [{ type: 'top', name: 'W', isUp: true }] }] },
+  ] };
+  v.addUpAverages(vis);
+  assert.deepEqual(vis.totals.avgUpChar, { avg: 108.5, ups: 2, pulls: 217 }, '77 + 80 + 60，不扣已墊（出貨抽數本來就不含）');
+  assert.equal(vis.totals.avgUpWeapon, null, '抽數完全不明的不列入');
+});
