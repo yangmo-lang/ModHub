@@ -43,6 +43,7 @@ const maps = require('./maps.cjs');
 const eff = require('./eff.cjs');
 const effMain = require('./eff-main.cjs');
 const keybinds = require('./keybinds.cjs');
+const onedragonMain = require('./onedragon-main.cjs');
 const keyCache = new Map(); // ini 路徑 → 解析過的按鍵（依大小 + 修改時間失效）
 
 const isDev = process.argv.includes('--dev');
@@ -173,7 +174,7 @@ app.whenReady().then(() => {
   }));
 
   // 介面只能改這些設定；金鑰等由專用 IPC 處理
-  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir']);
+  const RENDERER_KEYS = new Set(['xxmiRoot', 'qaqRoot', 'lastGame', 'showAdult', 'trayOnMinimize', 'trayOnClose', 'effGameDir', 'odRoot', 'odAfter', 'odInstance', 'odLaunchVia', 'odScheduleEnabled', 'odScheduleTime']);
   ipcMain.handle('settings:save', (_e, patch) => {
     const clean = Object.fromEntries(Object.entries(patch || {}).filter(([k]) => RENDERER_KEYS.has(k)));
     settings = { ...settings, ...clean };
@@ -251,6 +252,21 @@ app.whenReady().then(() => {
     modsDirFor: (gameId) => config.modsDirFor(settings, gameById(gameId).id),
     matcherFor,
     effGameDir,
+  });
+
+  // ---- 絕區零一條龍（OneDragon）：啟動、定時、下載官方安裝程式 ----
+  onedragonMain.register(ipcMain, {
+    getSettings: () => settings,
+    saveSettings: (patch) => {
+      settings = { ...settings, ...patch };
+      config.saveSettings(app.getPath('userData'), settings);
+    },
+    dialog,
+    shell,
+    BrowserWindow,
+    downloadsDir: () => app.getPath('downloads'),
+    launchGame: () => launcher.launch(settings.xxmiRoot, 'ZZMI', { gui: false }),
+    emit: (channel, payload) => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload); },
   });
 
   // ---- EFF 框架本體：狀態、一鍵安裝 / 更新 ----

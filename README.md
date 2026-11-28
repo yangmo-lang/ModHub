@@ -43,6 +43,37 @@ npm test         # 掃描/切換邏輯單元測試
 - 不注入遊戲，只是一般的置頂視窗：遊戲要設為「視窗化」或「無邊框全螢幕」，獨占全螢幕時看不到
 - `ModHub.exe --toggle-overlay` 也能叫出 / 收起（可綁到搖桿或其他快捷鍵工具）
 
+### 絕區零一條龍（自動每日）
+
+- 由第三方工具 [ZenlessZoneZero-OneDragon](https://github.com/OneDragon-Anything/ZenlessZoneZero-OneDragon)（GPL-3.0）執行；
+  ModHub **不含**它的程式碼，只用它公開的命令列參數啟動：`OneDragon-Launcher.exe -o [-c] [-s 60 | --sleep | --hibernate] [-i 實例]`
+  （經 Windows Shell 啟動，需要系統管理員權限時會跳 UAC）。`electron/onedragon.cjs`、`electron/onedragon-main.cjs`
+- 主畫面選絕區零多一個「**自動每日**」分頁（`src/AutoDaily.jsx`）：OneDragon 資料夾、跑完動作、帳號實例、定時、任務清單與各任務設定都在這裡；
+  遊戲內疊加介面選絕區零時只有「▶ 一條龍」執行按鈕
+- **開遊戲**：預設由 ModHub 先透過 XXMI 開絕區零（和「▶ 啟動」相同、會載入 MOD），偵測到 `ZenlessZoneZero.exe` 後再等 20 秒才啟動 OneDragon，
+  OneDragon 看到遊戲已開就不會自己執行 exe。Epic 版直接執行 exe 會缺少 Epic 啟動參數（`epic_check_launch_param: launch param not exists`）
+  而在載入時自行結束，所以需要這樣做；也可選「交給 OneDragon 開」
+- **任務設定**（任務旁的 ⚙，`electron/onedragon-apps.cjs`，寫 `config\<idx>\one_dragon\<app_id>.yml`）：
+  每日簽到選簽到地點（吼吼餅鋪 / 卦象集錄 / 刮刮卡，讀自 `daily_signin_setting_flyout.py`）；錄像店營業、咖啡店選傳送地點（選項讀自安裝目錄 `*_config.py` 的 `TransportPoint`）；
+  體力刷本新增 / 刪除 / 排序副本計畫與次數（選項讀自 `assets\game_data\compendium_data.yml` 的「训练」分頁：实战模拟室、区域巡防、专业挑战室、恶名狩猎），
+  選單與計畫標註掉落物（資料裡的 `mission_type_name_display` / `mission_name_display`：區域巡防的驅動盤套裝、實戰模擬室的產出；專業挑戰室、惡名狩獵沒有資料就不標），
+  新計畫用 OneDragon 的預設戰鬥設定，既有計畫的配隊等設定保留；只改這些欄位，第一次覆寫前備份
+- **任務清單**（設定與疊加介面）：讀寫 OneDragon 自己的設定 `config\one_dragon.yml`（帳號實例 `instance_list`）與
+  `config\<idx 兩位數>\one_dragon\_group.yml`（`app_list: [{ app_id, enabled }]`，順序 = 執行順序），勾選每日簽到、錄像店營業、咖啡店、
+  體力刷本、活躍度獎勵、麗都城募、麗都周紀等任務並調整順序（`electron/onedragon-tasks.cjs`，用 js-yaml）。
+  任務名稱與一條龍預設任務從安裝目錄的 `src\zzz_odpplication\**\*_const.py`（`APP_ID`、`APP_NAME`、`DEFAULT_GROUP`）以文字讀取，讀不到用內建名單。
+  沒有 `_group.yml` 時 ModHub 自己建立（有舊版 `one_dragon_app.yml` 就先遷移），不必先打開 OneDragon；
+  只改 `app_list`、保留其他欄位與清單外的項目，第一次覆寫前備份成 `.modhub-bak`；OneDragon 執行中不寫入。各任務的細節設定仍在 OneDragon 裡
+- 「自動每日」分頁：OneDragon 資料夾（沒設定時在各磁碟根目錄與使用者資料夾找名稱含 OneDragon 的資料夾）、跑完之後（預設關閉遊戲；可選不動作 / 關機 / 睡眠 / 休眠）、
+  帳號實例、每天定時執行（ModHub 開著時含系統匣，到時間後 30 分鐘內啟動一次，每天最多一次；失敗也不重試以免一直跳 UAC）
+- 沒裝時可「下載官方安裝程式」：從 GitHub 最新版下載 `*-Installer.exe` 到「下載」資料夾並比對 SHA-256，ModHub 不執行，使用者自己雙擊安裝
+- **繁體中文遊戲畫面**：OneDragon 只支援遊戲文字為简体中文 / English（用 OCR 比對簡體字，例如「训练」）。
+  「自動每日」可安裝 ModHub 自己寫的外掛 `<OneDragon>\plugins\modhub_zh_tw\`（`electron/onedragon-plugin/`、`electron/onedragon-zhtw.cjs`）：
+  OneDragon 載入外掛時把 OCR 模型（`onnxocr.onnx_paddleocr.ONNXPaddleOcr.ocr`）輸出的文字逐字繁轉簡，
+  對照表 `t2s.json` 安裝時用 opencc-js 產生（OpenCC 字典，Apache-2.0）。外掛是 `INTERNAL_APP`，不會出現在一條龍任務；
+  `plugins\` 在 OneDragon 的 .gitignore 裡，不會被它啟動時的程式更新（`force_update`）蓋掉，也不修改 OneDragon 本身的檔案。移除 = 移到資源回收筒
+- OneDragon 會模擬操作遊戲，可能違反遊戲條款，風險自負
+
 ### 系統匣
 
 - 最小化或按 ✕ 時縮到系統匣（可在「設定」分別關掉），遊戲內面板的快捷鍵仍然有效

@@ -145,6 +145,7 @@ export default function Settings({ settings, onClose, onSave }) {
           <label className="check"><input type="checkbox" checked={trayOnClose} onChange={(e) => setTrayOnClose(e.target.checked)} />按 ✕ 關閉時縮到系統匣（右鍵系統匣圖示 →「結束 ModHub」才會真的結束）</label>
           <span className="card-meta">縮到系統匣時，遊戲內面板的快捷鍵仍然有效</span>
         </div>
+        <div className="update-settings"><b>絕區零一條龍（自動每日）</b><span className="card-meta">設定移到主畫面：選絕區零 →「自動每日」分頁。</span></div>
         <NexusSettings />
         <UpdateSettings />
         <div className="row end">

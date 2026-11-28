@@ -112,6 +112,14 @@ export default function Overlay() {
     return [...byCat.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
   }, [data, query, onlyOn]);
 
+  // 絕區零一條龍：啟動第三方工具 OneDragon（設定裡選資料夾與跑完動作）
+  const runOneDragon = () => {
+    // 遊戲沒開時 ModHub 會先透過 XXMI 開遊戲，要等一陣子；先收起面板，結果顯示在主視窗
+    setMsg({ text: '一條龍準備中（遊戲沒開會先透過 XXMI 開遊戲），面板即將收起', kind: 'info' });
+    api.odRun().catch((e) => setMsg({ text: errText(e), kind: 'error' }));
+    setTimeout(() => api.overlayHide(), 1500);
+  };
+
   const pickMode = (m) => { setMode(m); api.overlaySetWide(m === 'map').catch(() => {}); };
   const showMap = HAS_MAP.has(gameId) && mode === 'map';
 
@@ -136,6 +144,9 @@ export default function Overlay() {
           </div>
         )}
         {!showMap && <span className="ov-count">{enabled}/{total} 啟用</span>}
+        {gameId === 'ZZMI' && (
+          <button className="ov-od" disabled={busy} onClick={runOneDragon} title="用 OneDragon 執行絕區零一條龍（自動每日）；任務與設定在主畫面「絕區零 → 自動每日」">▶ 一條龍</button>
+        )}
         <div className="spacer" />
         <button className="link" onClick={() => api.overlayOpenMain()} title="開啟 ModHub 主視窗">主視窗</button>
         <button className="ov-close" onClick={() => api.overlayHide()} title="收起（Esc）">✕</button>

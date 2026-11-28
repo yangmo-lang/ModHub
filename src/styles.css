@@ -687,3 +687,35 @@ kbd { font-family: inherit; font-size: 11px; padding: 0 5px; border: 1px solid v
 .lcx-bar .btn.small { margin-bottom: 0; flex: none; }
 .g-avg { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
 .g-avg b { color: var(--accent-2); font-size: 15px; }
+
+/* 絕區零一條龍 */
+.ov-od { -webkit-app-region: no-drag; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+.ov-od:disabled { opacity: 0.6; cursor: wait; }
+.od-settings .row { align-items: center; gap: 8px; flex-wrap: wrap; }
+.od-settings label.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; margin: 0; }
+.od-inst { width: 80px; }
+.od-time { width: 110px; }
+.od-tasks { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.od-tasks-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.od-task-list { display: flex; flex-direction: column; gap: 2px; }
+.od-tasks.compact .od-task-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
+.od-task { display: flex; align-items: center; justify-content: space-between; padding: 3px 6px; border-radius: 6px; }
+.od-task:hover { background: var(--panel-2); }
+.od-task:not(.on) label { color: var(--muted); }
+.od-task label.check { margin: 0; font-size: 13px; }
+.od-move .link { padding: 0 3px; }
+
+/* 絕區零自動每日 */
+.autodaily { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.autodaily .ad-title { font-size: 15px; }
+.ad-body { overflow: auto; padding: 4px 20px 32px; display: flex; flex-direction: column; gap: 12px; max-width: 980px; }
+.od-task.open { background: var(--panel-2); }
+.od-task-detail { margin: 2px 0 8px 26px; padding: 10px 12px; border-left: 2px solid var(--accent); background: var(--panel); border-radius: 0 8px 8px 0; }
+.od-detail { display: flex; flex-direction: column; gap: 6px; }
+.od-detail label.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; margin: 0; }
+.od-plan { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; padding: 3px 0; }
+.od-plan.add { padding-top: 8px; border-top: 1px dashed var(--line); }
+.od-plan-name { flex: 1; min-width: 200px; }
+.od-times { width: 64px; }
+.od-drop { display: block; color: var(--accent-2); font-size: 12px; }
+.od-zhtw { align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
