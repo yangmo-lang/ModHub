@@ -617,3 +617,16 @@ kbd { font-family: inherit; font-size: 11px; padding: 0 5px; border: 1px solid v
 .ov-card.on .ov-state { color: var(--on); }
 .ov-card-name { padding: 4px 6px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ov-thumb { width: 34px; height: 34px; border-radius: 6px; object-fit: cover; flex: none; background: var(--panel-2); }
+
+/* ---- 內嵌互動地圖 ---- */
+.map-host { flex: 1; min-height: 0; flex-direction: column; }
+.mapview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.map-bar { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+.map-bar .btn.small { margin-bottom: 0; min-width: 30px; }
+.map-bar .spacer { flex: 1; }
+.map-title { font-weight: 600; margin-left: 6px; }
+.map-status { font-size: 12px; color: var(--muted); }
+.map-status.error { color: var(--danger); }
+.map-credit { font-size: 12px; color: var(--muted); }
+.map-frame { flex: 1; min-height: 0; width: 100%; border: none; background: #fff; }
+.mapview.compact .map-bar { padding: 6px 12px; }

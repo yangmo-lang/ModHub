@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, screen, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, globalShortcut, screen, Tray, Menu, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
@@ -39,6 +39,7 @@ const launcher = require('./launcher.cjs');
 const { createModsWatcher } = require('./watcher.cjs');
 const overlayMod = require('./overlay.cjs');
 const trayMod = require('./tray.cjs');
+const maps = require('./maps.cjs');
 
 const isDev = process.argv.includes('--dev');
 let settings;
@@ -115,6 +116,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true, // 內嵌互動地圖（maps.cjs 限制只能載入地圖網域）
     },
   });
   loadRenderer(win);
@@ -423,6 +425,10 @@ ${modPath}`,
     return shell.openPath(p);
   });
 
+  // ---------- 內嵌互動地圖 ----------
+  maps.setupMapWebviews({ app, session, shell });
+  ipcMain.handle('maps:list', () => maps.MAPS);
+
   // ---------- 遊戲內疊加介面（全域快捷鍵） ----------
   overlay = overlayMod.createOverlay({
     BrowserWindow, globalShortcut, screen,
@@ -444,6 +450,7 @@ ${modPath}`,
   });
   ipcMain.handle('overlay:suspend', (_e, on) => overlay.suspend(Boolean(on)));
   ipcMain.handle('overlay:hide', () => overlay.hide());
+  ipcMain.handle('overlay:setWide', (_e, on) => overlay.setWide(Boolean(on)));
   ipcMain.handle('overlay:openMain', () => {
     overlay.hide();
     if (mainWin && !mainWin.isDestroyed()) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }

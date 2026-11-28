@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('modhub', {
   overlaySetHotkey: (key) => ipcRenderer.invoke('overlay:setHotkey', key),
   overlaySuspend: (on) => ipcRenderer.invoke('overlay:suspend', on),
   overlayHide: () => ipcRenderer.invoke('overlay:hide'),
+  overlaySetWide: (on) => ipcRenderer.invoke('overlay:setWide', on),
+  mapsList: () => ipcRenderer.invoke('maps:list'),
   overlayOpenMain: () => ipcRenderer.invoke('overlay:openMain'),
   onOverlayShow: on('overlay:show'),
   setEnabled: (gameId, modPath, enabled) => ipcRenderer.invoke('mods:setEnabled', gameId, modPath, enabled),

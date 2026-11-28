@@ -2,12 +2,13 @@
 //
 // - 不注入遊戲，只是一個置頂的 ModHub 視窗；遊戲需為「視窗化」或「無邊框全螢幕」，獨占全螢幕時看不到
 // - 叫出時依正在執行的遊戲程序判斷遊戲（XXMI 設定裡的 game_process_exe），沒有就用 ModHub 目前的遊戲
-// - 面板失去焦點（點回遊戲）、按 Esc 或再按一次快捷鍵就收起
+// - 面板失去焦點（點回遊戲）、按 Esc 或再按一次快捷鍵就收起；地圖模式（終末地）不會因失去焦點收起
 const { execFile } = require('node:child_process');
 
 const DEFAULT_HOTKEY = 'Alt+N';
 const GAME_EXE = { SRMI: 'StarRail.exe', ZZMI: 'ZenlessZoneZero.exe', WWMI: 'Client-Win64-Shipping.exe', EFMI: 'Endfield.exe' };
 const WIDTH = 500;
+const WIDE_MAX = 1280; // 地圖模式：放寬面板
 
 /** tasklist /fo csv /nh 的輸出 → 小寫程序名稱集合 */
 function parseTasklist(csv) {
@@ -60,6 +61,14 @@ function createOverlay(ctx) {
   let win = null;
   let hotkey = null;
   let lastHide = 0;
+  let wide = false;
+
+  /** 面板位置：滑鼠所在螢幕的右側（遊戲通常在那個螢幕）；地圖模式加寬並佔滿高度 */
+  function boundsFor(workArea) {
+    const width = wide ? Math.min(WIDE_MAX, workArea.width - 48) : WIDTH;
+    const height = wide ? workArea.height - 48 : Math.min(760, workArea.height - 80);
+    return { x: workArea.x + workArea.width - width - 24, y: workArea.y + (wide ? 24 : 40), width, height };
+  }
 
   function ensureWindow() {
     if (win && !win.isDestroyed()) return win;
@@ -74,10 +83,11 @@ function createOverlay(ctx) {
       fullscreenable: false,
       backgroundColor: '#14161c',
       title: 'ModHub 疊加介面',
-      webPreferences: { preload: ctx.preload, contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: { preload: ctx.preload, contextIsolation: true, nodeIntegration: false, sandbox: true, webviewTag: true },
     });
     win.setAlwaysOnTop(true, 'screen-saver');
-    win.on('blur', () => hide());
+    // 點回遊戲就收起；地圖模式例外（內嵌地圖的 <webview> 會讓視窗失去焦點），用快捷鍵或 ✕ 收起
+    win.on('blur', () => { if (!wide) hide(); });
     ctx.load(win, 'overlay');
     return win;
   }
@@ -94,10 +104,8 @@ function createOverlay(ctx) {
     const prefer = ctx.currentGame();
     const running = detectGame(await listProcesses(), prefer);
     const gameId = running || prefer;
-    // 放在滑鼠所在螢幕的右側（遊戲通常在那個螢幕）
     const { workArea } = ctx.screen.getDisplayNearestPoint(ctx.screen.getCursorScreenPoint());
-    const height = Math.min(760, workArea.height - 80);
-    w.setBounds({ x: workArea.x + workArea.width - WIDTH - 24, y: workArea.y + 40, width: WIDTH, height });
+    w.setBounds(boundsFor(workArea));
     w.webContents.send('overlay:show', { gameId, detected: Boolean(running) });
     w.show();
     w.focus();
@@ -109,6 +117,17 @@ function createOverlay(ctx) {
     // 按快捷鍵時面板會先因失去焦點收起，避免「收起後又馬上打開」
     if (Date.now() - lastHide < 250) return undefined;
     return show();
+  }
+
+  /** 切換地圖模式（加寬面板）；面板開著時就地調整，維持在目前的螢幕 */
+  function setWide(on) {
+    if (wide === on) return wide;
+    wide = on;
+    if (win && !win.isDestroyed() && win.isVisible()) {
+      const { workArea } = ctx.screen.getDisplayMatching(win.getBounds());
+      win.setBounds(boundsFor(workArea));
+    }
+    return wide;
   }
 
   /** 換快捷鍵：先註冊新的，成功才放掉舊的；key 為空字串 = 停用 */
@@ -149,7 +168,7 @@ function createOverlay(ctx) {
     win = null;
   }
 
-  return { setHotkey, suspend, toggle, show, hide, destroy, get hotkey() { return hotkey; }, get window() { return win; } };
+  return { setHotkey, suspend, toggle, show, hide, destroy, setWide, get hotkey() { return hotkey; }, get window() { return win; } };
 }
 
 module.exports = { createOverlay, normalizeHotkey, parseTasklist, detectGame, DEFAULT_HOTKEY, GAME_EXE };

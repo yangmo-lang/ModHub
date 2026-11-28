@@ -10,7 +10,7 @@ const installer = require('./installer.cjs');
 const scanner = require('./scanner.cjs');
 const translator = require('./translate.cjs');
 
-const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com|(hsr|ww|zzz)\.nanoka\.cc|wiki\.skland\.com|www\.skland\.com|ef\.yituliu\.cn|cos\.yituliu\.cn|github\.com|creativecommons\.org|www\.bilibili\.com|bannerhistory\.app|wiki\.biligame\.com)\//i;
+const ALLOWED_EXTERNAL = /^https:\/\/((www\.)?gamebanana\.com|(www\.|next\.)?nexusmods\.com|users\.nexusmods\.com|(hsr|ww|zzz)\.nanoka\.cc|wiki\.skland\.com|www\.skland\.com|ef\.yituliu\.cn|cos\.yituliu\.cn|github\.com|creativecommons\.org|www\.bilibili\.com|bannerhistory\.app|wiki\.biligame\.com|www\.zmdmap\.com)\//i;
 
 function register(ipcMain, ctx) {
   // ctx: { getSettings, saveSettings, modsDirFor(gameId), matcherFor(gameId), toTw }

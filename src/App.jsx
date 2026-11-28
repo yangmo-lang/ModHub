@@ -4,6 +4,7 @@ import Codex from './Codex.jsx';
 import Blueprint from './Blueprint.jsx';
 import Planner from './Planner.jsx';
 import Gacha from './Gacha.jsx';
+import MapView from './MapView.jsx';
 import Presets from './Presets.jsx';
 import { JobsPanel, InstallDialog } from './Jobs.jsx';
 import Picker from './Picker.jsx';
@@ -61,7 +62,9 @@ export default function App() {
   const [sort, setSort] = useState('release');
   const [facet, setFacet] = useState({ element: '', role: '', rarity: '', hasMods: false });
   const [picker, setPicker] = useState(null); // { mode: 'map', category } | { mode: 'move', mod }
-  const [view, setView] = useState('local'); // 'local' | 'online' | 'codex'
+  const [view, setView] = useState('local'); // 'local' | 'online' | 'codex' | 'planner' | 'gacha' | 'blueprint' | 'map'
+  const [mapOpened, setMapOpened] = useState(false); // 開過地圖後保留 <webview>，切分頁回來不用重新載入
+  useEffect(() => { if (view === 'map') setMapOpened(true); }, [view]);
   const [onlineSeed, setOnlineSeed] = useState(null); // 從圖鑑「找 MOD」帶過去的搜尋字
   const [jobs, setJobs] = useState([]);
   const [installing, setInstalling] = useState(null); // job
@@ -153,7 +156,7 @@ export default function App() {
     setShowPresets(false);
     rescan();
     if (gameId) api.saveSettings({ lastGame: gameId });
-    if (gameId && gameId !== 'EFMI') setView((v) => (v === 'blueprint' ? 'local' : v));
+    if (gameId && gameId !== 'EFMI') setView((v) => (v === 'blueprint' || v === 'map' ? 'local' : v));
   }, [gameId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const syncChars = useCallback(async (silent = false) => {
@@ -420,6 +423,7 @@ export default function App() {
           <button className={view === 'planner' ? 'active' : ''} onClick={() => setView('planner')}>養成計算</button>
           <button className={view === 'gacha' ? 'active' : ''} onClick={() => setView('gacha')}>抽卡紀錄</button>
           {gameId === 'EFMI' && <button className={view === 'blueprint' ? 'active' : ''} onClick={() => setView('blueprint')}>藍圖</button>}
+          {gameId === 'EFMI' && <button className={view === 'map' ? 'active' : ''} onClick={() => setView('map')}>互動地圖</button>}
           <div className="spacer" />
           <button className="btn small" onClick={async () => { const r = await api.pickArchives(gameId); if (r.length) showToast(`準備安裝 ${r.length} 個壓縮檔`); }}>📦 從壓縮檔安裝</button>
           {xxmiOk && (
@@ -430,7 +434,10 @@ export default function App() {
             </span>
           )}
         </div>
-        {view === 'blueprint' && gameId === 'EFMI' ? (
+        {mapOpened && gameId === 'EFMI' && (
+          <div className="map-host" style={{ display: view === 'map' ? 'flex' : 'none' }}><MapView gameId="EFMI" /></div>
+        )}
+        {view === 'map' && gameId === 'EFMI' ? null : view === 'blueprint' && gameId === 'EFMI' ? (
           <Blueprint showToast={showToast} />
         ) : view === 'gacha' ? (
           <Gacha gameId={gameId} gameName={game?.name || ''} showToast={showToast} />

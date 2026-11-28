@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errText, img } from './common.jsx';
+import MapView from './MapView.jsx';
 
 const VIEW_KEY = 'modhub.overlayView';
+const MODE_KEY = 'modhub.overlayMode';
+const HAS_MAP = new Set(['EFMI']); // 有內嵌互動地圖的遊戲
 
 /**
  * 遊戲內疊加介面（快捷鍵叫出的置頂小面板）
@@ -18,6 +21,10 @@ export default function Overlay() {
   const [onlyOn, setOnlyOn] = useState(false);
   const [view, setViewState] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid'); // grid = 圖片、list = 清單
   const setView = (v) => { setViewState(v); localStorage.setItem(VIEW_KEY, v); };
+  const [mode, setModeState] = useState(() => localStorage.getItem(MODE_KEY) || 'mods'); // mods | map
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const setMode = (m) => { setModeState(m); localStorage.setItem(MODE_KEY, m); };
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null); // { text, kind }
   const [hotkey, setHotkey] = useState('');
@@ -46,6 +53,7 @@ export default function Overlay() {
       setQuery('');
       setGameId(g);
       load(g);
+      api.overlaySetWide(HAS_MAP.has(g) && modeRef.current === 'map').catch(() => {});
       api.overlayGetHotkey().then((h) => setHotkey(h.hotkey || '')).catch(() => {});
       setTimeout(() => searchRef.current?.focus(), 50);
     });
@@ -56,6 +64,7 @@ export default function Overlay() {
   }, [load]);
 
   const switchGame = (g) => {
+    api.overlaySetWide(HAS_MAP.has(g) && mode === 'map').catch(() => {});
     setGameId(g);
     setData(null);
     setPresetId('');
@@ -97,6 +106,9 @@ export default function Overlay() {
     return [...byCat.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
   }, [data, query, onlyOn]);
 
+  const pickMode = (m) => { setMode(m); api.overlaySetWide(m === 'map').catch(() => {}); };
+  const showMap = HAS_MAP.has(gameId) && mode === 'map';
+
   const game = games.find((g) => g.id === gameId);
   const total = data?.mods?.length || 0;
   const enabled = data?.mods?.filter((m) => m.enabled).length || 0;
@@ -111,12 +123,22 @@ export default function Overlay() {
           ))}
         </div>
         {running === gameId && <span className="ov-badge" title="依正在執行的遊戲程序判斷">遊戲中</span>}
-        <span className="ov-count">{enabled}/{total} 啟用</span>
+        {HAS_MAP.has(gameId) && (
+          <div className="ov-games">
+            <button className={!showMap ? 'active' : ''} onClick={() => pickMode('mods')}>MOD</button>
+            <button className={showMap ? 'active' : ''} onClick={() => pickMode('map')}>地圖</button>
+          </div>
+        )}
+        {!showMap && <span className="ov-count">{enabled}/{total} 啟用</span>}
         <div className="spacer" />
         <button className="link" onClick={() => api.overlayOpenMain()} title="開啟 ModHub 主視窗">主視窗</button>
         <button className="ov-close" onClick={() => api.overlayHide()} title="收起（Esc）">✕</button>
       </header>
 
+      {showMap ? <>
+        <MapView gameId={gameId} compact />
+        <footer className="ov-foot">地圖模式點回遊戲不會收起 · 按 {hotkey ? <kbd>{hotkey}</kbd> : null}{hotkey ? ' 或 ' : ''}右上角 ✕ 收起</footer>
+      </> : <>
       <div className="ov-tools">
         <input ref={searchRef} className="search" placeholder="搜尋角色或 MOD…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <label className="check"><input type="checkbox" checked={onlyOn} onChange={(e) => setOnlyOn(e.target.checked)} />只看啟用</label>
@@ -178,6 +200,7 @@ export default function Overlay() {
         改完回遊戲按 <kbd>F10</kbd> 重新載入 · <kbd>Esc</kbd>{hotkey ? <> 或 <kbd>{hotkey}</kbd></> : null} 收起
         {game && !running && <span className="ov-hint">　沒偵測到執行中的遊戲，顯示 {game.short || game.name}</span>}
       </footer>
+      </>}
     </div>
   );
 }

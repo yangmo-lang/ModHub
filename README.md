@@ -36,6 +36,7 @@ npm test         # 掃描/切換邏輯單元測試
 - 面板預設以圖片顯示（MOD 預覽圖、角色頭像，點卡片切換啟用），也可切成清單
 - 自動判斷正在執行的遊戲（StarRail.exe、ZenlessZoneZero.exe、Client-Win64-Shipping.exe、Endfield.exe），沒有就用 ModHub 目前的遊戲
 - 再按一次快捷鍵、按 Esc 或點回遊戲就收起
+- 終末地多一個「地圖」模式：面板加寬顯示互動地圖；這個模式點回遊戲不會收起，用快捷鍵或 ✕ 收起
 - 不注入遊戲，只是一般的置頂視窗：遊戲要設為「視窗化」或「無邊框全螢幕」，獨占全螢幕時看不到
 - `ModHub.exe --toggle-overlay` 也能叫出 / 收起（可綁到搖桿或其他快捷鍵工具）
 
@@ -161,6 +162,13 @@ npm test         # 掃描/切換邏輯單元測試
 - 一圖流改版的因應：解析不依賴固定排版（欄位順序、型別註記、陣列寫法改變都能讀）；預設位置讀不到時，
   先試上次成功的位置，再列出 repo 檔案樹找含 `blueprint` 的檔案（`aic/` 優先），找到就改讀新位置並在畫面上標示
 
+### 終末地互動地圖
+
+- 選終末地時多一個「互動地圖」分頁（疊加介面也有「地圖」模式），內嵌 [zmdmap.com](https://www.zmdmap.com/) 的網頁；ModHub 不內建地圖內容
+- 用 Electron `<webview>`（網站禁止 iframe 內嵌），獨立的 `persist:zmdmap` 分區、沙箱、無 preload，
+  只能瀏覽 zmdmap.com；點到其他網站的連結改用系統瀏覽器開啟，網站要求的權限（定位、通知等）一律拒絕
+- 切到其他分頁時保留地圖狀態，不會重新載入
+
 ### 線上下載（GameBanana / Nexus Mods）
 
 - 「線上下載」分頁：最新 / 最近更新 / 熱門、關鍵字或依角色搜尋，預設隱藏成人內容
@@ -201,4 +209,4 @@ ModHub 以 [MIT 授權](LICENSE) 釋出。
 - 打包的第三方套件各自依其授權：React、node-unrar-js、7zip-bin（MIT）、opencc-js（MIT 與 Apache-2.0）；
   7zip-bin 內含的 `7za.exe` 屬於 7-Zip（GNU LGPL 與 unRAR 授權限制）
 - 遊戲名稱、角色名稱與圖片屬於各自的權利人（HoYoverse、庫洛、鷹角網路等）；ModHub 是非官方工具，與上述公司無關
-- 圖鑑、卡池等資料於執行時從 nanoka.cc、森空島 wiki、BannerHistory、BWiki、akedata 與官方 API 讀取，不隨程式散布
+- 圖鑑、卡池等資料於執行時從 nanoka.cc、森空島 wiki、BannerHistory、BWiki、akedata 與官方 API 讀取；互動地圖是內嵌 zmdmap.com 的網頁，不隨程式散布
